@@ -26,8 +26,8 @@ function computeLayout(holes, opts) {
 
   // Per-glass normalization: scale difficulty and yardage within THIS glass's holes
   const totalYardage = holes.reduce((s, h) => s + (h.yardage || 350), 0);
-  const minAngle = 20;
-  const maxAngle = 50;
+  const minAngle = 35;
+  const maxAngle = 55;
 
   // Find difficulty range within this glass
   const difficulties = holes.map((h) => h.difficulty || 9);
@@ -100,10 +100,10 @@ function computeLayout(holes, opts) {
   let contentMinX = Infinity, contentMaxX = -Infinity;
   for (const h of positioned) {
     // Label sits below tee: startY + ~12px
-    contentMinY = Math.min(contentMinY, h.startY - 2);
-    contentMaxY = Math.max(contentMaxY, h.startY + 14);
-    contentMinX = Math.min(contentMinX, h.startX - 14);
-    contentMaxX = Math.max(contentMaxX, h.startX + 14);
+    contentMinY = Math.min(contentMinY, h.startY - 6);
+    contentMaxY = Math.max(contentMaxY, h.startY + 20);
+    contentMinX = Math.min(contentMinX, h.startX - 16);
+    contentMaxX = Math.max(contentMaxX, h.startX + 16);
     for (const f of h.features) {
       for (const [x, y] of f.coords) {
         contentMinY = Math.min(contentMinY, y);
@@ -136,8 +136,11 @@ function computeLayout(holes, opts) {
     }
   }
 
-  // Post-pass: pack holes tight AFTER rescaling (removes gaps introduced by rescale)
+  // Post-pass: pack holes tight AFTER rescaling
   packHoles(positioned);
+
+  // Post-pass: ensure every hole has visible downward slope
+  enforceSlope(positioned);
 
   return {
     holes: positioned,
@@ -214,14 +217,14 @@ function fixOverlaps(holes) {
     const curr = holes[i];
 
     // Compute Y extent from FEATURES only (+ label padding), not routing endpoints
-    let prevMaxY = prev.startY + 14; // label below tee
+    let prevMaxY = prev.startY + 20; // label below tee
     for (const f of prev.features) {
       for (const [, y] of f.coords) {
         if (y > prevMaxY) prevMaxY = y;
       }
     }
 
-    let currMinY = curr.startY - 2;
+    let currMinY = curr.startY - 6;
     for (const f of curr.features) {
       for (const [, y] of f.coords) {
         if (y < currMinY) currMinY = y;
@@ -282,6 +285,38 @@ function packHoles(holes) {
           for (const c of f.coords) c[1] += shift;
         }
       }
+    }
+  }
+}
+
+/**
+ * Ensure every hole's tee bottom is above the green top by a minimum amount.
+ * If not, shift the green features down (and everything below them).
+ */
+function enforceSlope(holes) {
+  const minDrop = 6;
+
+  for (const h of holes) {
+    const tees = h.features.filter(f => f.category === 'tee');
+    const greens = h.features.filter(f => f.category === 'green');
+    if (tees.length === 0 || greens.length === 0) continue;
+
+    let teeBottomY = -Infinity;
+    for (const t of tees) for (const [, y] of t.coords) teeBottomY = Math.max(teeBottomY, y);
+    let greenTopY = Infinity;
+    for (const g of greens) for (const [, y] of g.coords) greenTopY = Math.min(greenTopY, y);
+
+    const drop = greenTopY - teeBottomY;
+    if (drop < minDrop) {
+      const shift = minDrop - drop;
+      // Simply shift ALL non-tee features down by the full amount
+      for (const f of h.features) {
+        if (f.category === 'tee') continue;
+        for (const c of f.coords) {
+          c[1] += shift;
+        }
+      }
+      h.endY += shift;
     }
   }
 }

@@ -75,15 +75,34 @@
           <select id="glassCount">
             <option value="1">1 glass</option>
             <option value="2">2 glasses</option>
-            <option value="3">3 glasses</option>
-            <option value="6" selected>6 glasses (3 holes each)</option>
+            <option value="3" selected>3 glasses</option>
+            <option value="6">6 glasses (3 holes each)</option>
           </select>
         </div>
         <div class="field-row">
-          <div class="field"><label>H (mm)</label><input type="number" id="glassHeight" value="146" min="50" max="300" /></div>
-          <div class="field"><label>Top R</label><input type="number" id="glassTopR" value="43" min="10" max="100" /></div>
-          <div class="field"><label>Bot R</label><input type="number" id="glassBotR" value="30" min="10" max="100" /></div>
+          <div class="field"><label>H (mm)</label><input type="number" id="glassHeight" value="146" min="50" max="300" step="0.1" /></div>
+          <div class="field"><label>Top R</label><input type="number" id="glassTopR" value="43" min="10" max="100" step="0.1" /></div>
+          <div class="field"><label>Bot R</label><input type="number" id="glassBotR" value="30" min="10" max="100" step="0.1" /></div>
         </div>
+        <div class="field-row">
+          <div class="field"><label>Wall (mm)</label><input type="number" id="glassWall" value="3" min="0" max="10" step="0.5" /></div>
+          <div class="field"><label>Base (mm)</label><input type="number" id="glassBase" value="5" min="0" max="15" step="0.5" /></div>
+        </div>
+        <div class="field">
+          <label>Fill mode</label>
+          <select id="fillMode">
+            <option value="full">Full glass (no top padding)</option>
+            <option value="can" selected>Standard can (355ml)</option>
+            <option value="custom">Custom padding</option>
+          </select>
+        </div>
+        <div id="customPaddingFields" style="display:none;">
+          <div class="field-row">
+            <div class="field"><label>Top pad %</label><input type="number" id="topPadPct" value="0" min="0" max="50" /></div>
+            <div class="field"><label>Bot pad %</label><input type="number" id="botPadPct" value="2" min="0" max="50" /></div>
+          </div>
+        </div>
+        <div id="volumeInfo" style="font-size:0.7rem;color:#6a7a9a;margin-top:4px;"></div>
       </div>
 
       <div class="control-section">
@@ -175,9 +194,9 @@
   </div>
   <div class="status-bar" id="statusBar">Ready</div>
 
-  <script src="layout-engine.js?v=16"></script>
-  <script src="glass-template.js?v=16"></script>
-  <script src="svg-renderer.js?v=16"></script>
+  <script src="layout-engine.js?v=21"></script>
+  <script src="glass-template.js?v=21"></script>
+  <script src="svg-renderer.js?v=21"></script>
   <script>
     let courseData = null;
     let previewMode = "glass";
@@ -339,7 +358,31 @@
       const glassHeight = parseFloat(document.getElementById("glassHeight").value) || 146;
       const topR = parseFloat(document.getElementById("glassTopR").value) || 43;
       const botR = parseFloat(document.getElementById("glassBotR").value) || 30;
-      const template = computeGlassTemplate({ glassHeight, topRadius: topR, bottomRadius: botR });
+      const wallT = parseFloat(document.getElementById("glassWall").value) || 3;
+      const baseT = parseFloat(document.getElementById("glassBase").value) || 5;
+      const template = computeGlassTemplate({ glassHeight, topRadius: topR, bottomRadius: botR, wallThickness: wallT, baseThickness: baseT });
+
+      // Compute padding based on fill mode
+      const fillMode = document.getElementById("fillMode").value;
+      let topPadding = 0, bottomPadding = 0.02;
+      if (fillMode === "can") {
+        const fill = computeFillHeight(template, 355);
+        topPadding = 1 - fill.fraction; // empty space above beer line
+        bottomPadding = 0.02;
+      } else if (fillMode === "custom") {
+        topPadding = (parseFloat(document.getElementById("topPadPct").value) || 0) / 100;
+        bottomPadding = (parseFloat(document.getElementById("botPadPct").value) || 0) / 100;
+      } else {
+        topPadding = 0;
+        bottomPadding = 0.02;
+      }
+
+      // Update volume info
+      const volInfo = document.getElementById("volumeInfo");
+      volInfo.textContent = `Glass: ${template.volumeMl.toFixed(0)}ml  |  ` +
+        (fillMode === "can" ? `355ml fill: ${(computeFillHeight(template, 355).fraction * 100).toFixed(0)}% height  |  Top pad: ${(topPadding * 100).toFixed(0)}%` :
+         fillMode === "custom" ? `Top: ${(topPadding*100).toFixed(0)}%, Bottom: ${(bottomPadding*100).toFixed(0)}%` :
+         'Full glass');
 
       const rectW = 600, rectH = rectW * (template.slantHeight / template.topCircumference);
 
@@ -363,7 +406,7 @@
 
       let svgStr;
       if (previewMode === "glass") {
-        const warped = warpLayout(layout, template);
+        const warped = warpLayout(layout, template, { topPadding, bottomPadding });
         renderOpts.showGlassOutline = true;
         svgStr = renderSvg(warped, renderOpts);
       } else {
@@ -378,7 +421,13 @@
     }
 
     // Config change listeners
-    for (const id of ["glassCount", "glassHeight", "glassTopR", "glassBotR", "showText", "perHoleColors", "fontPicker"]) {
+    // Fill mode toggle
+    document.getElementById("fillMode").addEventListener("change", (e) => {
+      document.getElementById("customPaddingFields").style.display = e.target.value === "custom" ? "block" : "none";
+      renderCurrentGlass();
+    });
+
+    for (const id of ["glassCount", "glassHeight", "glassTopR", "glassBotR", "glassWall", "glassBase", "showText", "perHoleColors", "fontPicker", "fillMode", "topPadPct", "botPadPct"]) {
       document.getElementById(id).addEventListener("change", () => {
         if (id === "glassCount") { rebuildGlassSelector(); }
         renderCurrentGlass();
@@ -557,6 +606,9 @@
         showText: document.getElementById("showText").checked,
         perHoleColors: document.getElementById("perHoleColors").checked,
         fontFamily: document.getElementById("fontPicker").value,
+        fillMode: document.getElementById("fillMode").value,
+        topPadPct: document.getElementById("topPadPct").value,
+        botPadPct: document.getElementById("botPadPct").value,
         previewMode,
         currentGlassIndex,
         hiddenLayers: [...hiddenLayers],
@@ -573,6 +625,9 @@
       if (s.showText !== undefined) document.getElementById("showText").checked = s.showText;
       if (s.perHoleColors !== undefined) document.getElementById("perHoleColors").checked = s.perHoleColors;
       if (s.fontFamily) document.getElementById("fontPicker").value = s.fontFamily;
+      if (s.fillMode) { document.getElementById("fillMode").value = s.fillMode; document.getElementById("customPaddingFields").style.display = s.fillMode === "custom" ? "block" : "none"; }
+      if (s.topPadPct) document.getElementById("topPadPct").value = s.topPadPct;
+      if (s.botPadPct) document.getElementById("botPadPct").value = s.botPadPct;
       if (s.previewMode) { previewMode = s.previewMode; document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === previewMode)); }
       if (s.currentGlassIndex !== undefined) currentGlassIndex = s.currentGlassIndex;
       if (s.hiddenLayers) { hiddenLayers = new Set(s.hiddenLayers); initLayerToggles(); }
