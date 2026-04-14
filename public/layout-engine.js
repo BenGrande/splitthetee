@@ -94,12 +94,34 @@ function computeLayout(holes, opts) {
   // Post-pass: detect vertical overlaps and push holes down
   fixOverlaps(positioned);
 
-  // Post-pass: scale content to fill the full draw area
-  // Use VISIBLE content extent (features + label padding), not invisible routing endpoints
+  // Scale content to fill the draw area
+  rescaleToFill(positioned, drawLeft, drawTop, drawWidth, drawHeight);
+
+  // Post-pass: pack holes tight AFTER rescaling
+  packHoles(positioned);
+
+  // Post-pass: ensure every hole has visible downward slope
+  enforceSlope(positioned);
+
+  // Final rescale — packHoles and enforceSlope compress/shift content,
+  // so we need one more pass to fill the canvas fully
+  rescaleToFill(positioned, drawLeft, drawTop, drawWidth, drawHeight);
+
+  return {
+    holes: positioned,
+    canvasWidth,
+    canvasHeight,
+    drawArea: { left: drawLeft, right: drawRight, top: drawTop, bottom: drawBottom },
+  };
+}
+
+/**
+ * Rescale all positioned holes so their visible content fills the draw area.
+ */
+function rescaleToFill(holes, drawLeft, drawTop, drawWidth, drawHeight) {
   let contentMinY = Infinity, contentMaxY = -Infinity;
   let contentMinX = Infinity, contentMaxX = -Infinity;
-  for (const h of positioned) {
-    // Label sits below tee: startY + ~12px
+  for (const h of holes) {
     contentMinY = Math.min(contentMinY, h.startY - 6);
     contentMaxY = Math.max(contentMaxY, h.startY + 20);
     contentMinX = Math.min(contentMinX, h.startX - 16);
@@ -115,39 +137,23 @@ function computeLayout(holes, opts) {
   }
   const contentHeight = contentMaxY - contentMinY;
   const contentWidth = contentMaxX - contentMinX;
-  if (contentHeight > 0) {
-    // Scale to fill height, and also scale X proportionally
-    const yRescale = drawHeight / contentHeight;
-    const xRescale = drawWidth / contentWidth;
-    // Use the smaller scale to preserve aspect ratio... actually we want to fill,
-    // so scale Y to fill height and X to fill width independently
-    for (const h of positioned) {
-      h.startX = drawLeft + (h.startX - contentMinX) * xRescale;
-      h.endX = drawLeft + (h.endX - contentMinX) * xRescale;
-      h.startY = drawTop + (h.startY - contentMinY) * yRescale;
-      h.endY = drawTop + (h.endY - contentMinY) * yRescale;
-      h.length *= yRescale;
-      for (const f of h.features) {
-        for (const c of f.coords) {
-          c[0] = drawLeft + (c[0] - contentMinX) * xRescale;
-          c[1] = drawTop + (c[1] - contentMinY) * yRescale;
-        }
+  if (contentHeight <= 0 || contentWidth <= 0) return;
+
+  const yRescale = drawHeight / contentHeight;
+  const xRescale = drawWidth / contentWidth;
+  for (const h of holes) {
+    h.startX = drawLeft + (h.startX - contentMinX) * xRescale;
+    h.endX = drawLeft + (h.endX - contentMinX) * xRescale;
+    h.startY = drawTop + (h.startY - contentMinY) * yRescale;
+    h.endY = drawTop + (h.endY - contentMinY) * yRescale;
+    h.length *= yRescale;
+    for (const f of h.features) {
+      for (const c of f.coords) {
+        c[0] = drawLeft + (c[0] - contentMinX) * xRescale;
+        c[1] = drawTop + (c[1] - contentMinY) * yRescale;
       }
     }
   }
-
-  // Post-pass: pack holes tight AFTER rescaling
-  packHoles(positioned);
-
-  // Post-pass: ensure every hole has visible downward slope
-  enforceSlope(positioned);
-
-  return {
-    holes: positioned,
-    canvasWidth,
-    canvasHeight,
-    drawArea: { left: drawLeft, right: drawRight, top: drawTop, bottom: drawBottom },
-  };
 }
 
 /**

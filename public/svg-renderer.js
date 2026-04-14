@@ -112,9 +112,19 @@ function renderSvg(layout, opts = {}) {
     svg += `<g class="layer-hole_par">`;
     for (const hole of holes) {
       if (!hole.par) continue;
-      const dx = hole.endX-hole.startX, dy = hole.endY-hole.startY, len = Math.sqrt(dx*dx+dy*dy)||1;
-      const px = -dy/len, py = dx/len, off = 8;
-      const lx = hole.endX + px*off*(hole.direction>0?1:-1), ly = hole.endY + py*off*(hole.direction>0?1:-1);
+      // Position par label near the green centroid, offset below
+      const greens = hole.features.filter(f => f.category === "green");
+      let lx, ly;
+      if (greens.length > 0) {
+        let gx = 0, gy = 0, n = 0;
+        for (const g of greens) for (const [x, y] of g.coords) { gx += x; gy += y; n++; }
+        lx = gx / n;
+        ly = gy / n + (isWarped ? 4 : 6);
+      } else {
+        // Fallback: use routing endpoint
+        lx = hole.endX;
+        ly = hole.endY + (isWarped ? 4 : 6);
+      }
       svg += `<text x="${ff(lx)}" y="${ff(ly+2)}" text-anchor="middle" fill="${s.fill}" font-size="${sz*0.75}" font-family="${fontFamily}" opacity="${s.opacity}">P${hole.par}</text>`;
     }
     svg += `</g>`;

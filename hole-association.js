@@ -66,8 +66,19 @@ function bboxOverlaps(a, b) {
  * @returns {Array} Array of hole objects with associated features
  */
 function associateFeatures(features, courseData) {
-  const holes = features
+  const rawHoles = features
     .filter((f) => f.category === "hole" && f.ref)
+    .sort((a, b) => Number(a.ref) - Number(b.ref));
+
+  // Deduplicate holes with the same ref — keep the one with the longest route
+  const holesByRef = new Map();
+  for (const h of rawHoles) {
+    const existing = holesByRef.get(h.ref);
+    if (!existing || h.coords.length > existing.coords.length) {
+      holesByRef.set(h.ref, h);
+    }
+  }
+  const holes = Array.from(holesByRef.values())
     .sort((a, b) => Number(a.ref) - Number(b.ref));
 
   const otherFeatures = features.filter(

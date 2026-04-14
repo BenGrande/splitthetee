@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo import ASCENDING, DESCENDING
+
+from app.core.config import settings
+
+_db: AsyncIOMotorDatabase | None = None
+
+
+def get_collection(name: str):
+    if _db is None:
+        raise RuntimeError("Database not initialized")
+    return _db[name]
+
+
+async def _ensure_indexes() -> None:
+    """Create indexes for all collections."""
+
+    # Search cache — TTL index
+    search_cache = _db["search_cache"]
+    await search_cache.create_index([("query", ASCENDING)], unique=True)
+    await search_cache.create_index(
+        [("cached_at", ASCENDING)],
+        expireAfterSeconds=settings.SEARCH_CACHE_TTL,
+    )
+
+    # Map cache — TTL index
+    map_cache = _db["map_cache"]
+    await map_cache.create_index([("cache_key", ASCENDING)], unique=True)
+    await map_cache.create_index(
+        [("cached_at", ASCENDING)],
+        expireAfterSeconds=settings.MAP_CACHE_TTL,
+    )
+
+    # Bundle cache — TTL index
+    bundle_cache = _db["bundle_cache"]
+    await bundle_cache.create_index([("cache_key", ASCENDING)], unique=True)
+    await bundle_cache.create_index(
+        [("cached_at", ASCENDING)],
+        expireAfterSeconds=settings.MAP_CACHE_TTL,
+    )
+
+    # Courses — for search and lookup
+    courses = _db["courses"]
+    await courses.create_index([("course_id", ASCENDING)], unique=True, sparse=True)
+
+    # Glass sets
+    glass_sets = _db["glass_sets"]
+    await glass_sets.create_index([("created_at", DESCENDING)])
+
+    # Game sessions
+    game_sessions = _db["game_sessions"]
+    await game_sessions.create_index([("glass_set_id", ASCENDING)])
+    await game_sessions.create_index([("created_at", DESCENDING)])
+
+    # Players
+    players = _db["players"]
+    await players.create_index([("session_id", ASCENDING)])
+
+    # Scores
+    scores = _db["scores"]
+    await scores.create_index(
+        [("session_id", ASCENDING), ("player_id", ASCENDING), ("hole_number", ASCENDING)]
+    )
+
+    # Settings
+    design_settings = _db["design_settings"]
+    await design_settings.create_index([("created_at", DESCENDING)])
+
+
+@asynccontextmanager
+async def lifespan(app):
+    global _db
+    client = AsyncIOMotorClient(settings.MONGODB_URI)
+    _db = client[settings.MONGODB_DB_NAME]
+    app.state.db = _db
+    try:
+        await _ensure_indexes()
+    except Exception as exc:
+        import logging
+        logging.getLogger("onenine").warning("Index creation failed (may need DB permissions): %s", exc)
+    yield
+    _db = None
+    client.close()
