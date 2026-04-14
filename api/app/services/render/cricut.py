@@ -136,16 +136,15 @@ def _compact_arrange(pieces: list[dict], canvas_width: float = 200,
 def render_cricut_white(layout: dict, zones_by_hole: list[dict],
                         template: dict | None = None, opts: dict | None = None,
                         terrain_zones: list | None = None) -> str:
-    """Render white vinyl layer — delegates to shared vinyl preview renderer."""
+    """Render white vinyl layer — uses same rendering as glass preview."""
     from app.services.render.svg import _render_vinyl_preview
-    opts = opts or {}
-    render_opts = {
-        **opts,
-        "vinyl_preview": True,
-        "zones_by_hole": zones_by_hole,
-    }
-    if terrain_zones is not None:
-        render_opts["terrain_zones"] = terrain_zones
+
+    render_opts = dict(opts or {})
+    render_opts["zones_by_hole"] = zones_by_hole
+    render_opts["terrain_zones"] = terrain_zones or []
+    render_opts["is_warped"] = layout.get("warped") and layout.get("template")
+    render_opts["vinyl_preview"] = True
+
     return _render_vinyl_preview(layout, render_opts, layer="white")
 
 
@@ -171,6 +170,36 @@ def render_cricut_blue(layout: dict, opts: dict | None = None) -> str:
     opts = opts or {}
     render_opts = {**opts, "vinyl_preview": True, "zones_by_hole": []}
     return _render_vinyl_preview(layout, render_opts, layer="blue")
+
+
+def render_cricut_green_inplace(layout: dict, opts: dict | None = None) -> str:
+    """Render green elements in glass layout positions (not compact)."""
+    from app.services.render.svg import _render_vinyl_preview
+    render_opts = dict(opts or {})
+    render_opts["vinyl_preview"] = True
+    render_opts["zones_by_hole"] = []
+    render_opts["terrain_zones"] = []
+    return _render_vinyl_preview(layout, render_opts, layer="green")
+
+
+def render_cricut_blue_inplace(layout: dict, opts: dict | None = None) -> str:
+    """Render blue elements in glass layout positions (not compact)."""
+    from app.services.render.svg import _render_vinyl_preview
+    render_opts = dict(opts or {})
+    render_opts["vinyl_preview"] = True
+    render_opts["zones_by_hole"] = []
+    render_opts["terrain_zones"] = []
+    return _render_vinyl_preview(layout, render_opts, layer="blue")
+
+
+def render_cricut_tan_inplace(layout: dict, opts: dict | None = None) -> str:
+    """Render tan elements in glass layout positions (not compact)."""
+    from app.services.render.svg import _render_vinyl_preview
+    render_opts = dict(opts or {})
+    render_opts["vinyl_preview"] = True
+    render_opts["zones_by_hole"] = []
+    render_opts["terrain_zones"] = []
+    return _render_vinyl_preview(layout, render_opts, layer="tan")
 
 
 def render_cricut_guide(layout: dict, opts: dict | None = None) -> str:

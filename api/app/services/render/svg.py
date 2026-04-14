@@ -144,13 +144,22 @@ def _build_text_paths(template: dict) -> str:
 
 
 def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_family: str) -> str:
-    """Render vertical ruler: hole# rect at top, flush score rects below, no spine."""
+    """Render vertical ruler — two-column design.
+
+    LEFT column: hole numbers spanning full section height, rotated 90°,
+                 alternating white-filled/outline rectangles.
+    RIGHT column: score labels for each zone with alternating fills.
+    """
     right_edge = draw_area.get("right", 870)
-    col_w = 20
-    col_x = right_edge - col_w - 5
-    col_cx = col_x + col_w / 2
-    hole_rect_h = 12
-    gap = 3
+    hole_col_w = 14    # hole number column width
+    score_col_w = 16   # score column width
+    col_gap = 2
+    total_w = hole_col_w + col_gap + score_col_w
+    start_x = right_edge - total_w - 5
+
+    hole_x = start_x
+    score_x = start_x + hole_col_w + col_gap
+    score_cx = score_x + score_col_w / 2
     label_font = 8
 
     svg = '<g class="layer-ruler">'
@@ -163,39 +172,47 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
 
         section_top = zones[0]["y_top"]
         section_bottom = zones[-1]["y_bottom"]
+        section_h = section_bottom - section_top
         is_odd = (hole_ref % 2 == 1) if isinstance(hole_ref, int) else True
 
-        # --- Hole number rect at TOP of section ---
+        # --- Hole number rect spanning FULL section height ---
         if is_odd:
             svg += (
-                f'<rect x="{_ff(col_x)}" y="{_ff(section_top)}" '
-                f'width="{_ff(col_w)}" height="{_ff(hole_rect_h)}" '
+                f'<rect x="{_ff(hole_x)}" y="{_ff(section_top)}" '
+                f'width="{_ff(hole_col_w)}" height="{_ff(section_h)}" '
                 f'fill="white" stroke="none" opacity="0.85"/>'
             )
+            # Rotated 90° text centered in the rectangle
+            hcx = hole_x + hole_col_w / 2
+            hcy = section_top + section_h / 2
             svg += (
-                f'<text x="{_ff(col_cx)}" y="{_ff(section_top + hole_rect_h * 0.72)}" '
-                f'text-anchor="middle" fill="#1a1a1a" font-size="9" font-weight="700" '
-                f'font-family="{font_family}">{hole_ref}</text>'
+                f'<text x="{_ff(hcx)}" y="{_ff(hcy)}" '
+                f'text-anchor="middle" dominant-baseline="central" '
+                f'fill="#1a1a1a" font-size="10" font-weight="700" '
+                f'font-family="{font_family}" '
+                f'transform="rotate(-90, {_ff(hcx)}, {_ff(hcy)})">{hole_ref}</text>'
             )
         else:
             svg += (
-                f'<rect x="{_ff(col_x)}" y="{_ff(section_top)}" '
-                f'width="{_ff(col_w)}" height="{_ff(hole_rect_h)}" '
+                f'<rect x="{_ff(hole_x)}" y="{_ff(section_top)}" '
+                f'width="{_ff(hole_col_w)}" height="{_ff(section_h)}" '
                 f'fill="none" stroke="white" stroke-width="0.8" opacity="0.85"/>'
             )
+            hcx = hole_x + hole_col_w / 2
+            hcy = section_top + section_h / 2
             svg += (
-                f'<text x="{_ff(col_cx)}" y="{_ff(section_top + hole_rect_h * 0.72)}" '
-                f'text-anchor="middle" fill="white" font-size="9" font-weight="700" '
-                f'font-family="{font_family}">{hole_ref}</text>'
+                f'<text x="{_ff(hcx)}" y="{_ff(hcy)}" '
+                f'text-anchor="middle" dominant-baseline="central" '
+                f'fill="white" font-size="10" font-weight="700" '
+                f'font-family="{font_family}" '
+                f'transform="rotate(-90, {_ff(hcx)}, {_ff(hcy)})">{hole_ref}</text>'
             )
 
-        # --- Score rects flush below hole number ---
-        score_top = section_top + hole_rect_h + gap
-
+        # --- Score rects in separate column ---
         for zone in zones:
             label = zone["label"]
             score = zone.get("score", 0)
-            zt = max(zone["y_top"], score_top)
+            zt = zone["y_top"]
             zb = zone["y_bottom"]
             zh = zb - zt
             y_mid = (zt + zb) / 2
@@ -206,26 +223,33 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
             is_odd_score = score in (1, 3, 5)
             if is_odd_score:
                 svg += (
-                    f'<rect x="{_ff(col_x)}" y="{_ff(zt)}" '
-                    f'width="{_ff(col_w)}" height="{_ff(zh)}" '
+                    f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
+                    f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
                     f'fill="white" stroke="none" opacity="0.8"/>'
                 )
                 svg += (
-                    f'<text x="{_ff(col_cx)}" y="{_ff(y_mid + 3)}" '
+                    f'<text x="{_ff(score_cx)}" y="{_ff(y_mid + 3)}" '
                     f'text-anchor="middle" fill="#1a1a1a" font-size="{label_font}" font-weight="700" '
                     f'font-family="{font_family}">{_esc_xml(label)}</text>'
                 )
             else:
                 svg += (
-                    f'<rect x="{_ff(col_x)}" y="{_ff(zt)}" '
-                    f'width="{_ff(col_w)}" height="{_ff(zh)}" '
+                    f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
+                    f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
                     f'fill="none" stroke="white" stroke-width="0.5" opacity="0.7"/>'
                 )
                 svg += (
-                    f'<text x="{_ff(col_cx)}" y="{_ff(y_mid + 3)}" '
+                    f'<text x="{_ff(score_cx)}" y="{_ff(y_mid + 3)}" '
                     f'text-anchor="middle" fill="white" font-size="{label_font}" '
                     f'font-family="{font_family}" opacity="0.7">{_esc_xml(label)}</text>'
                 )
+
+            # Tick marks at zone boundaries extending across both columns
+            svg += (
+                f'<line x1="{_ff(score_x - 2)}" y1="{_ff(zt)}" '
+                f'x2="{_ff(score_x + score_col_w + 2)}" y2="{_ff(zt)}" '
+                f'stroke="white" stroke-width="0.3" opacity="0.4"/>'
+            )
 
     svg += "</g>"
     return svg
@@ -270,7 +294,7 @@ def _render_terrain_zones(terrain_zones: list, opts: dict, font_family: str,
             if vinyl_mode:
                 svg += (
                     f'<path d="{d}" fill="none" stroke="#ffffff" '
-                    f'stroke-width="0.3" opacity="0.3"/>'
+                    f'stroke-width="0.4" opacity="0.5"/>'
                 )
             else:
                 color = _PREVIEW_COLORS.get(score, "rgba(128,128,128,0.2)")
@@ -285,8 +309,16 @@ def _render_terrain_zones(terrain_zones: list, opts: dict, font_family: str,
                 ly = lp.get("y", 0)
                 label = f"{score:+d}" if score != 0 else "0"
                 fill = "#ffffff" if vinyl_mode else "#000000"
-                opacity = "0.8" if vinyl_mode else "0.8"
-                fs = 5 if not vinyl_mode else 4
+                opacity = "0.9" if vinyl_mode else "0.8"
+                fs = 6 if not vinyl_mode else 5
+                # Add a dark halo behind white text for readability
+                if vinyl_mode:
+                    svg += (
+                        f'<text x="{_ff(lx)}" y="{_ff(ly + 1.5)}" text-anchor="middle" '
+                        f'fill="#000000" font-size="{fs}" font-weight="700" '
+                        f'font-family="{font_family}" opacity="0.6" '
+                        f'stroke="#000000" stroke-width="2">{label}</text>'
+                    )
                 svg += (
                     f'<text x="{_ff(lx)}" y="{_ff(ly + 1.5)}" text-anchor="middle" '
                     f'fill="{fill}" font-size="{fs}" font-weight="700" '
@@ -309,7 +341,7 @@ def _render_terrain_zones(terrain_zones: list, opts: dict, font_family: str,
 
 
 def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
-    """Render par/yardage/handicap as a rounded rectangle sign near hole number."""
+    """Render par/yardage/handicap as a rounded rectangle sign at the canvas margin."""
     lines = []
     if hole.get("par"):
         lines.append(f"Par {hole['par']}")
@@ -322,39 +354,30 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
         return ""
 
     is_warped = opts.get("vinyl_preview") and opts.get("is_warped")
-    font_size = 3.5 if is_warped else 4.5
+    font_size = 3 if is_warped else 4
     line_height = font_size + 1.5
     padding_x = 3
     padding_y = 2
-    box_w = 24
+    box_w = 22
     box_h = padding_y * 2 + line_height * len(lines)
 
-    # Position: on the outer side of tee (toward canvas margin, away from fairway)
-    cr = 5
+    # Position: on the outer side of hole number, away from fairway
     direction = hole.get("direction", 1)
-    hole_num_x_off = -(cr + 3) if direction > 0 else (cr + 3)
-    hole_num_x = hole["start_x"] + hole_num_x_off
-    hole_num_y = hole["start_y"] + cr + 4
+    cr = 5 if is_warped else 6
+    x_off = -(cr + 3) if direction > 0 else (cr + 3)
+    hole_num_x = hole.get("start_x", 0) + x_off
 
-    # Determine tee side: compare tee_x vs green_x (or use start_x vs end_x)
-    tee_on_left = hole.get("start_x", 0) < hole.get("end_x", 0)
-
-    canvas_w = opts.get("_canvas_width", 900)
-    if tee_on_left:
+    if direction > 0:
+        # Hole goes left-to-right, number is left of tee, stats go further left
         box_x = hole_num_x - cr - 2 - box_w
     else:
+        # Hole goes right-to-left, number is right of tee, stats go further right
         box_x = hole_num_x + cr + 2
 
-    # Boundary check: flip to other side if clipped
-    if box_x < 0:
-        box_x = hole_num_x + cr + 2
-    elif box_x + box_w > canvas_w:
-        box_x = hole_num_x - cr - 2 - box_w
-
-    anchor = "start"
     text_x = box_x + padding_x
 
-    box_y = hole_num_y - box_h / 2
+    # Vertical: centered on the tee position
+    box_y = hole.get("start_y", 0) - box_h / 2 + 8
 
     svg = (
         f'<rect x="{_ff(box_x)}" y="{_ff(box_y)}" '
@@ -366,7 +389,7 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
         ty = box_y + padding_y + (i + 0.8) * line_height
         svg += (
             f'<text x="{_ff(text_x)}" y="{_ff(ty)}" '
-            f'text-anchor="{anchor}" fill="white" font-size="{font_size}" '
+            f'text-anchor="start" fill="white" font-size="{font_size}" '
             f'font-family="{font_family}" opacity="0.8">{_esc_xml(line)}</text>'
         )
 
@@ -535,7 +558,7 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
             if cat in _WHITE_CATS and _white:
                 svg += (
                     f'<path d="{d}" fill="none" stroke="#ffffff" '
-                    f'stroke-width="0.3" opacity="0.6"/>'
+                    f'stroke-width="0.2" opacity="0.6"/>'
                 )
             elif cat in _GREEN_FILL_CATS and _green:
                 # Solid green fill with score knockout mask
@@ -560,11 +583,32 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     )
                 _filled_idx += 1
             elif cat in _GREEN_CATS and _green:
-                sw = "0.3" if cat == "tee" else "0.4"
+                sw = "0.2" if cat == "tee" else "0.3"
                 svg += (
                     f'<path d="{d}" fill="none" stroke="#4ade80" '
                     f'stroke-width="{sw}" opacity="0.85"/>'
                 )
+                # Add hole marker (small circle + flag) inside green
+                if cat == "green" and feat.get("coords"):
+                    coords = feat["coords"]
+                    gx = sum(p[0] for p in coords) / len(coords)
+                    gy = sum(p[1] for p in coords) / len(coords)
+                    # Small white circle (the hole)
+                    svg += (
+                        f'<circle cx="{_ff(gx)}" cy="{_ff(gy)}" r="1.2" '
+                        f'fill="none" stroke="#ffffff" stroke-width="0.4" opacity="0.9"/>'
+                    )
+                    # Small flag pole + triangle
+                    svg += (
+                        f'<line x1="{_ff(gx)}" y1="{_ff(gy)}" '
+                        f'x2="{_ff(gx)}" y2="{_ff(gy - 4)}" '
+                        f'stroke="#ffffff" stroke-width="0.3" opacity="0.8"/>'
+                    )
+                    svg += (
+                        f'<path d="M{_ff(gx)},{_ff(gy - 4)}L{_ff(gx + 2.5)},{_ff(gy - 3)}'
+                        f'L{_ff(gx)},{_ff(gy - 2)}Z" '
+                        f'fill="#ffffff" opacity="0.8"/>'
+                    )
             elif cat in _BLUE_CATS and _blue:
                 # Solid blue fill with score knockout mask
                 mid = f"wtMask{_filled_idx}"
@@ -606,7 +650,7 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
             ly = hole["start_y"] + cr + 4
             svg += (
                 f'<circle cx="{_ff(lx)}" cy="{_ff(ly)}" r="{cr}" '
-                f'fill="none" stroke="#ffffff" stroke-width="0.8" opacity="0.8"/>'
+                f'fill="none" stroke="#ffffff" stroke-width="0.5" opacity="0.8"/>'
             )
             svg += (
                 f'<text x="{_ff(lx)}" y="{_ff(ly + sz * 0.38)}" text-anchor="middle" '
@@ -675,7 +719,16 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
 
 def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
                          opts: dict, font_family: str) -> str:
-    """Render ruler on glass sector — rotated elements following curvature."""
+    """Render ruler on glass sector — two-column design following curvature.
+
+    In rotated coordinate space (rotated by edge_angle around origin):
+    - y-axis is radial (negative = outward toward outer_r)
+    - x-axis is tangential (negative = inside glass, positive = outside)
+
+    Both columns placed at NEGATIVE x (inside glass).
+    SCORE column is closer to edge (less negative x).
+    HOLE column is further inside (more negative x).
+    """
     t = layout.get("template", {})
     if not t:
         return ""
@@ -692,21 +745,21 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
     if canvas_range <= 0:
         canvas_range = 1
 
-    col_w = 10
-    hole_rect_h = 6
-    gap = 2
-    min_font = 3
+    score_col_w = 7
+    hole_col_w = 8
+    col_gap = 2
+    min_font = 2.5
+
+    # Both columns INSIDE the glass (negative x in rotated frame)
+    # Score column closer to edge, hole column further inside
+    score_cx = -(score_col_w / 2 + 1)
+    hole_cx = -(score_col_w + col_gap + hole_col_w / 2 + 1)
 
     def _y_to_r(y):
         frac = (y - canvas_top) / canvas_range
         return outer_r - frac * (outer_r - inner_r)
 
-    def _polar(r, a):
-        return r * math.sin(a), -r * math.cos(a)
-
     svg = '<g class="layer-ruler">'
-
-    _labels = []
 
     for hi, zone_result in enumerate(zones_by_hole):
         hole_ref = zone_result.get("hole_ref", "")
@@ -718,100 +771,110 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
         section_bottom = zones[-1]["y_bottom"]
         is_odd = (hole_ref % 2 == 1) if isinstance(hole_ref, int) else True
 
-        # --- Hole number rect at top of section, rotated ---
         r_top = _y_to_r(section_top)
-        cx, cy = _polar(r_top, edge_angle)
-        # Adaptive size based on available radial space
-        r_bot_sect = _y_to_r(section_bottom)
-        avail_r = abs(r_top - r_bot_sect)
-        h_rect_h = min(hole_rect_h, avail_r * 0.15)
-        if h_rect_h < 4:
-            h_rect_h = 4
+        r_bot = _y_to_r(section_bottom)
+        section_r = abs(r_top - r_bot)
+
+        if section_r < 5:
+            continue
+
+        # --- Hole number rect ---
+        # Small fixed-height rect at top of section
+        hole_rect_h = min(12, section_r * 0.2)
+        ry_top = -r_top  # SVG y = -r (so outer_r is most negative = top)
 
         svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
-        # In rotated space, r maps to y (from center), angle maps to x
-        # Position rect at r_top along the radius
-        ry = -r_top  # SVG y is inverted
+
+        # Hole number rect with rounded corners, spanning a fixed height at top
+        hn_h = min(10, section_r * 0.18)
+        hn_y = ry_top
+
         if is_odd:
             svg += (
-                f'<rect x="{_ff(-col_w / 2)}" y="{_ff(ry)}" '
-                f'width="{_ff(col_w)}" height="{_ff(h_rect_h)}" '
+                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(hn_y)}" '
+                f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
                 f'fill="white" stroke="none" opacity="0.85"/>'
             )
+            text_cy = hn_y + hn_h / 2
+            fs = min(5, max(min_font, hn_h * 0.6))
             svg += (
-                f'<text x="0" y="{_ff(ry + h_rect_h * 0.72)}" '
-                f'text-anchor="middle" fill="#1a1a1a" font-size="{_ff(max(min_font, h_rect_h * 0.7))}" '
-                f'font-weight="700" font-family="{font_family}">{hole_ref}</text>'
+                f'<text x="{_ff(hole_cx)}" y="{_ff(text_cy)}" '
+                f'text-anchor="middle" dominant-baseline="central" '
+                f'fill="#1a1a1a" font-size="{_ff(fs)}" font-weight="700" '
+                f'font-family="{font_family}" '
+                f'transform="rotate(-90, {_ff(hole_cx)}, {_ff(text_cy)})">{hole_ref}</text>'
             )
         else:
             svg += (
-                f'<rect x="{_ff(-col_w / 2)}" y="{_ff(ry)}" '
-                f'width="{_ff(col_w)}" height="{_ff(h_rect_h)}" '
+                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(hn_y)}" '
+                f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
                 f'fill="none" stroke="white" stroke-width="0.5" opacity="0.85"/>'
             )
+            text_cy = hn_y + hn_h / 2
+            fs = min(5, max(min_font, hn_h * 0.6))
             svg += (
-                f'<text x="0" y="{_ff(ry + h_rect_h * 0.72)}" '
-                f'text-anchor="middle" fill="white" font-size="{_ff(max(min_font, h_rect_h * 0.7))}" '
-                f'font-weight="700" font-family="{font_family}">{hole_ref}</text>'
+                f'<text x="{_ff(hole_cx)}" y="{_ff(text_cy)}" '
+                f'text-anchor="middle" dominant-baseline="central" '
+                f'fill="white" font-size="{_ff(fs)}" font-weight="700" '
+                f'font-family="{font_family}" '
+                f'transform="rotate(-90, {_ff(hole_cx)}, {_ff(text_cy)})">{hole_ref}</text>'
             )
+
         svg += '</g>'
 
-        # --- Score rects below hole number, rotated ---
-        score_r_start = r_top - h_rect_h - gap
+        # --- Score rects below hole number ---
+        # Start scores after the hole number rect
+        score_start_r = r_top - hn_h - 2  # small gap after hole number
+        score_end_r = r_bot
 
         for zone in zones:
             label = zone["label"]
             score = zone.get("score", 0)
             r_zt = _y_to_r(zone["y_top"])
             r_zb = _y_to_r(zone["y_bottom"])
-            r_zt = min(r_zt, score_r_start)
+
+            # Clamp to score area (below hole number)
+            r_zt = min(r_zt, score_start_r)
+            r_zb = max(r_zb, score_end_r)
+
             zone_r = abs(r_zt - r_zb)
 
-            if zone_r < 1:
+            if zone_r < 2:
                 continue
 
-            # Adaptive font
-            fs = min(4, max(min_font, zone_r * 0.6))
+            fs = min(3.5, max(min_font, zone_r * 0.55))
             if zone_r < min_font:
-                continue  # skip unreadable labels
+                continue
 
             r_mid = (r_zt + r_zb) / 2
-
-            # Anti-overlap
-            overlaps = False
-            for prev_r in _labels:
-                if abs(r_mid - prev_r) < 3:
-                    overlaps = True
-                    break
-            if overlaps:
-                continue
-            _labels.append(r_mid)
+            ry = -r_zt  # SVG y for top of zone
 
             svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
-            ry = -r_zt
+
             is_odd_score = score in (1, 3, 5)
             if is_odd_score:
                 svg += (
-                    f'<rect x="{_ff(-col_w / 2)}" y="{_ff(ry)}" '
-                    f'width="{_ff(col_w)}" height="{_ff(zone_r)}" '
-                    f'fill="white" stroke="none" opacity="0.8"/>'
+                    f'<rect x="{_ff(score_cx - score_col_w / 2)}" y="{_ff(ry)}" '
+                    f'width="{_ff(score_col_w)}" height="{_ff(zone_r)}" '
+                    f'fill="white" stroke="none" opacity="0.75"/>'
                 )
                 svg += (
-                    f'<text x="0" y="{_ff(-r_mid + fs * 0.35)}" '
+                    f'<text x="{_ff(score_cx)}" y="{_ff(-r_mid + fs * 0.35)}" '
                     f'text-anchor="middle" fill="#1a1a1a" font-size="{_ff(fs)}" font-weight="700" '
                     f'font-family="{font_family}">{_esc_xml(label)}</text>'
                 )
             else:
                 svg += (
-                    f'<rect x="{_ff(-col_w / 2)}" y="{_ff(ry)}" '
-                    f'width="{_ff(col_w)}" height="{_ff(zone_r)}" '
-                    f'fill="none" stroke="white" stroke-width="0.4" opacity="0.7"/>'
+                    f'<rect x="{_ff(score_cx - score_col_w / 2)}" y="{_ff(ry)}" '
+                    f'width="{_ff(score_col_w)}" height="{_ff(zone_r)}" '
+                    f'fill="none" stroke="white" stroke-width="0.3" opacity="0.65"/>'
                 )
                 svg += (
-                    f'<text x="0" y="{_ff(-r_mid + fs * 0.35)}" '
+                    f'<text x="{_ff(score_cx)}" y="{_ff(-r_mid + fs * 0.35)}" '
                     f'text-anchor="middle" fill="white" font-size="{_ff(fs)}" '
-                    f'font-family="{font_family}" opacity="0.7">{_esc_xml(label)}</text>'
+                    f'font-family="{font_family}" opacity="0.65">{_esc_xml(label)}</text>'
                 )
+
             svg += '</g>'
 
     svg += "</g>"

@@ -61,6 +61,10 @@ async def render(data: dict):
     if "course_name" in data and "course_name" not in options:
         options["course_name"] = data["course_name"]
 
+    # Allow hole_range at top level or inside options
+    if "hole_range" in data and "hole_range" not in options:
+        options["hole_range"] = data["hole_range"]
+
     # Auto-compute hole_range if not provided
     if "hole_range" not in options and holes:
         refs = [h.get("ref") for h in holes if h.get("ref") is not None]
@@ -194,6 +198,10 @@ async def render_cricut(data: dict):
     # Allow course_name at top level or inside options
     if "course_name" in data and "course_name" not in options:
         options["course_name"] = data["course_name"]
+
+    # Allow hole_range at top level or inside options
+    if "hole_range" in data and "hole_range" not in options:
+        options["hole_range"] = data["hole_range"]
 
     # Compute hole_range if not provided
     if "hole_range" not in options and holes:

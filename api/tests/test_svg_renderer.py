@@ -522,15 +522,17 @@ class TestRulerReadability:
         # Should have hole number and score labels
         assert 'fill="white"' in svg
 
-    def test_score_rects_span_full_width(self):
-        """Score rectangles should span the full tick width (sharp corners)."""
+    def test_score_rects_in_separate_column(self):
+        """Score rectangles should be in a separate column with sharp corners."""
         layout = self._make_layout()
         svg = render_svg(layout, {"zones_by_hole": self._make_full_zones()})
         ruler_match = re.search(r'<g class="layer-ruler">(.*?)</g>', svg, re.DOTALL)
         assert ruler_match
         ruler_svg = ruler_match.group(1)
-        # Score rects should have width = tick_len * 2 (20px)
-        assert 'width="20.0"' in ruler_svg, "Score rects should span 20px (full tick width)"
+        # Score rects present (width=16 for score column)
+        assert 'width="16.0"' in ruler_svg, "Score rects should be 16px wide"
+        # Hole number column present (width=14)
+        assert 'width="14.0"' in ruler_svg, "Hole number rects should be 14px wide"
         # No rx attributes (sharp corners)
         assert 'rx=' not in ruler_svg
 
@@ -545,15 +547,17 @@ class TestRulerReadability:
         # Odd hole (1): white filled rect with dark knocked-out text
         assert 'fill="white"' in ruler_svg and 'fill="#1a1a1a"' in ruler_svg
 
-    def test_ruler_has_flush_score_rects(self):
-        """Score rects should be flush (no spine line, rects form the visual column)."""
+    def test_ruler_two_column_layout(self):
+        """Ruler should have two columns: hole numbers + scores, with tick lines."""
         layout = self._make_layout()
         svg = render_svg(layout, {"zones_by_hole": self._make_full_zones()})
         ruler_match = re.search(r'<g class="layer-ruler">(.*?)</g>', svg, re.DOTALL)
         assert ruler_match
         ruler_svg = ruler_match.group(1)
-        # No spine line — rects form the column
-        assert '<line' not in ruler_svg, "No spine line in new ruler design"
-        # Multiple rects present (hole number + scores)
+        # Multiple rects present (hole number full-height + score rects)
         rect_count = ruler_svg.count('<rect')
         assert rect_count >= 5, f"Expected many rects, got {rect_count}"
+        # Hole number text should be rotated 90°
+        assert 'rotate(-90' in ruler_svg, "Hole numbers should be rotated 90°"
+        # Tick lines at zone boundaries
+        assert '<line' in ruler_svg, "Tick marks at zone boundaries"
