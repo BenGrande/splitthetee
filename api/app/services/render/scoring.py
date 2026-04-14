@@ -380,54 +380,99 @@ def add_scoring_features_to_layout(layout: dict, zones_by_hole: list[dict]) -> N
             y_mid = (y_lo + y_hi) / 2
             label = f"{score:+d}" if score != 0 else "0"
 
-            # Find best x-position per filled feature
+            # Find best label position per filled feature using 2D grid sampling.
+            # For each candidate point, measure the minimum distance to the
+            # polygon boundary (approximated via edge segments). The point
+            # farthest from all edges is the most "interior" — the visual
+            # center of mass where the label fits best.
             for f in hole.get("features", []):
                 fcat = f.get("category", "")
                 if fcat not in ("fairway", "water"):
                     continue
                 coords = f.get("coords", [])
-                pts_in_band = [pt for pt in coords if y_lo <= pt[1] <= y_hi]
-                if len(pts_in_band) < 2:
+                if len(coords) < 3:
                     continue
 
-                f_x_min = min(p[0] for p in pts_in_band)
-                f_x_max = max(p[0] for p in pts_in_band)
-                f_x_span = f_x_max - f_x_min
-                f_x_center = (f_x_min + f_x_max) / 2
+                # Build polygon edges for distance checks
+                n_edges = len(coords)
+                edges = []
+                for ei in range(n_edges):
+                    ej = (ei + 1) % n_edges
+                    edges.append((coords[ei], coords[ej]))
 
-                if f_x_span < 0.5:
-                    v_span = max(p[1] for p in pts_in_band) - min(p[1] for p in pts_in_band)
-                    if v_span >= 1:
-                        ko_fs = min(3, max(1.2, min(band_h, v_span) * 0.5))
-                        hole["features"].append({
-                            "category": "zone_label",
-                            "coords": [[f_x_center, y_mid]],
-                            "score": score, "label": label,
-                            "font_size": ko_fs, "feature_cat": fcat,
-                            "id": None, "ref": None, "par": None, "name": None,
-                        })
+                # Bounding box of feature clipped to band
+                all_x = [p[0] for p in coords]
+                all_y = [p[1] for p in coords]
+                clip_y_lo = max(y_lo, min(all_y))
+                clip_y_hi = min(y_hi, max(all_y))
+                if clip_y_hi - clip_y_lo < 0.5:
+                    continue
+                clip_x_lo = min(all_x)
+                clip_x_hi = max(all_x)
+                if clip_x_hi - clip_x_lo < 0.5:
                     continue
 
-                # Sample 15 x-positions, pick thickest with center bias
-                n_samples = 15
-                margin = max(1.0, f_x_span * 0.15)
-                best = None
-                for si in range(n_samples):
-                    sx = f_x_min + (si + 0.5) * f_x_span / n_samples
-                    nearby_y = [p[1] for p in pts_in_band if abs(p[0] - sx) < margin]
-                    if len(nearby_y) >= 2:
-                        v_span = max(nearby_y) - min(nearby_y)
-                        dist = abs(sx - f_x_center) / (f_x_span / 2 + 0.01)
-                        bonus = 1.0 + 0.3 * max(0, 1.0 - dist)
-                        sc = v_span * bonus
-                        if best is None or sc > best["score"]:
-                            best = {"x": sx, "v": v_span, "score": sc}
+                # Sample a grid of candidate points
+                n_x, n_y = 15, 10
 
-                if best and best["v"] >= 1:
-                    ko_fs = min(3, max(1.2, min(band_h, best["v"]) * 0.5))
+                def _pt_in_poly(cx, cy):
+                    inside = False
+                    for (ax, ay), (bx, by) in edges:
+                        if (ay > cy) != (by > cy):
+                            ix = ax + (cy - ay) / (by - ay) * (bx - ax)
+                            if cx < ix:
+                                inside = not inside
+                    return inside
+
+                def _min_edge_dist(cx, cy):
+                    min_d = min(abs(cy - y_lo), abs(cy - y_hi))
+                    for (ax, ay), (bx, by) in edges:
+                        dx, dy = bx - ax, by - ay
+                        if dx == 0 and dy == 0:
+                            d = ((cx - ax) ** 2 + (cy - ay) ** 2) ** 0.5
+                        else:
+                            t = max(0, min(1, ((cx - ax) * dx + (cy - ay) * dy) / (dx * dx + dy * dy)))
+                            px, py = ax + t * dx, ay + t * dy
+                            d = ((cx - px) ** 2 + (cy - py) ** 2) ** 0.5
+                        if d < min_d:
+                            min_d = d
+                    return min_d
+
+                # Pass 1: find centroid of all interior grid points (visual center of mass)
+                interior_pts = []
+                for yi in range(n_y):
+                    cy = clip_y_lo + (yi + 0.5) * (clip_y_hi - clip_y_lo) / n_y
+                    for xi in range(n_x):
+                        cx = clip_x_lo + (xi + 0.5) * (clip_x_hi - clip_x_lo) / n_x
+                        if _pt_in_poly(cx, cy):
+                            interior_pts.append((cx, cy))
+
+                if not interior_pts:
+                    continue
+
+                centroid_x = sum(p[0] for p in interior_pts) / len(interior_pts)
+                centroid_y = sum(p[1] for p in interior_pts) / len(interior_pts)
+
+                # Pass 2: pick the point with best edge clearance, biased toward centroid.
+                # Score = edge_distance - penalty for distance from centroid
+                best_pt = None
+                best_score = -999
+                for cx, cy in interior_pts:
+                    ed = _min_edge_dist(cx, cy)
+                    # Penalty: distance from centroid — stronger pull toward center
+                    cd = ((cx - centroid_x) ** 2 + (cy - centroid_y) ** 2) ** 0.5
+                    penalty = cd * 0.5
+                    sc = ed - penalty
+                    if sc > best_score:
+                        best_score = sc
+                        best_pt = (cx, cy)
+                        best_dist = ed
+
+                if best_pt and best_dist >= 0.5:
+                    ko_fs = min(2, max(1, best_dist * 0.5))
                     hole["features"].append({
                         "category": "zone_label",
-                        "coords": [[best["x"], y_mid]],
+                        "coords": [[best_pt[0], best_pt[1]]],
                         "score": zone["score"], "label": label,
                         "font_size": ko_fs, "feature_cat": fcat,
                         "id": None, "ref": None, "par": None, "name": None,
@@ -689,10 +734,53 @@ def compute_terrain_following_zones(
         y_top = min(ys) if ys else gcy
         y_bottom = max(ys) if ys else gcy
 
-        # Label position
+        # Label position — find widest part of the BAND between this and prev polygon
         area = _polygon_area(polygon)
         inside = area > 100
         lp_x, lp_y = _polygon_centroid(polygon)
+        best_band_w = 0
+
+        def _x_extents_at_y(poly, test_y):
+            """Get min/max x of polygon at a given y via edge intersections."""
+            xs = []
+            for pi2 in range(len(poly)):
+                pj2 = (pi2 + 1) % len(poly)
+                py0, py1 = poly[pi2][1], poly[pj2][1]
+                if (py0 <= test_y <= py1) or (py1 <= test_y <= py0):
+                    if py1 != py0:
+                        t = (test_y - py0) / (py1 - py0)
+                        xs.append(poly[pi2][0] + t * (poly[pj2][0] - poly[pi2][0]))
+            if len(xs) >= 2:
+                return min(xs), max(xs)
+            return None
+
+        for frac_i in range(1, 20):
+            test_y = y_top + (frac_i / 20) * (y_bottom - y_top)
+            outer = _x_extents_at_y(polygon, test_y)
+            if not outer:
+                continue
+            inner = _x_extents_at_y(prev_polygon, test_y)
+            if inner:
+                # Band is the outer polygon minus inner polygon
+                # Use the side (left or right) with more band width
+                left_band = inner[0] - outer[0]
+                right_band = outer[1] - inner[1]
+                if left_band > right_band and left_band > best_band_w:
+                    best_band_w = left_band
+                    lp_x = (outer[0] + inner[0]) / 2
+                    lp_y = test_y
+                elif right_band >= left_band and right_band > best_band_w:
+                    best_band_w = right_band
+                    lp_x = (outer[1] + inner[1]) / 2
+                    lp_y = test_y
+            else:
+                # prev polygon doesn't reach this y — full outer width is the band
+                w = outer[1] - outer[0]
+                if w > best_band_w:
+                    best_band_w = w
+                    lp_x = (outer[0] + outer[1]) / 2
+                    lp_y = test_y
+
         leader = None
         if not inside:
             # Place label outside to the right with leader line
@@ -708,10 +796,11 @@ def compute_terrain_following_zones(
             y_center=y_center,
             y_top=y_top,
             y_bottom=y_bottom,
-            label_position={"x": lp_x, "y": lp_y, "inside": inside},
+            label_position={"x": lp_x, "y": lp_y, "inside": inside, "zone_h": zone_height, "zone_w": best_band_w},
             leader_line=leader,
         ))
 
+        prev_polygon = polygon
         cumulative_offset += zone_height
 
     return zones

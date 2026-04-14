@@ -19,11 +19,11 @@
  */
 function computeGlassTemplate(opts) {
   const {
-    glassHeight = 146,
-    topRadius = 43,
-    bottomRadius = 30,
-    wallThickness = 3,
-    baseThickness = 5,
+    glassHeight = 134.8,
+    topRadius = 44.2,
+    bottomRadius = 31.6,
+    wallThickness = 3.1,
+    baseThickness = 11.5,
   } = opts || {};
 
   const topCircumference = 2 * Math.PI * topRadius;

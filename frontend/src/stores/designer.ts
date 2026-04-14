@@ -58,11 +58,11 @@ export const useDesignerStore = defineStore('designer', () => {
   const currentGlass = ref(0)
 
   const glassDimensions = reactive({
-    height: 146,
-    topRadius: 43,
-    bottomRadius: 30,
-    wallThickness: 3,
-    baseThickness: 5,
+    height: 134.8,
+    topRadius: 44.2,
+    bottomRadius: 31.6,
+    wallThickness: 3.1,
+    baseThickness: 11.5,
   })
 
   const fillMode = ref<'full' | 'can' | 'custom'>('can')

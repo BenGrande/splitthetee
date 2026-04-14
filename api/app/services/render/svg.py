@@ -331,17 +331,21 @@ def _render_terrain_zones(terrain_zones: list, opts: dict, font_family: str,
                 label = f"{score:+d}" if score != 0 else "0"
                 fill = "#ffffff" if vinyl_mode else "#000000"
                 opacity = "0.9" if vinyl_mode else "0.8"
-                fs = 6 if not vinyl_mode else 5
+                zone_h = lp.get("zone_h", 6)
+                zone_w = lp.get("zone_w", 6)
+                fs = max(1.5, min(3, min(zone_h, zone_w) * 0.25))
                 # Add a dark halo behind white text for readability
                 if vinyl_mode:
                     svg += (
-                        f'<text x="{_ff(lx)}" y="{_ff(ly + 1.5)}" text-anchor="middle" '
+                        f'<text x="{_ff(lx)}" y="{_ff(ly)}" text-anchor="middle" '
+                        f'dominant-baseline="central" '
                         f'fill="#000000" font-size="{fs}" font-weight="700" '
                         f'font-family="{font_family}" opacity="0.6" '
                         f'stroke="#000000" stroke-width="2">{label}</text>'
                     )
                 svg += (
-                    f'<text x="{_ff(lx)}" y="{_ff(ly + 1.5)}" text-anchor="middle" '
+                    f'<text x="{_ff(lx)}" y="{_ff(ly)}" text-anchor="middle" '
+                    f'dominant-baseline="central" '
                     f'fill="{fill}" font-size="{fs}" font-weight="700" '
                     f'font-family="{font_family}" opacity="{opacity}">{label}</text>'
                 )
@@ -657,7 +661,8 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     for kl in _knockout_labels:
                         kfs = kl.get("font_size", 3)
                         svg += (
-                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"] + kfs * 0.35)}" text-anchor="middle" '
+                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"])}" text-anchor="middle" '
+                            f'dominant-baseline="central" '
                             f'fill="black" font-size="{_ff(kfs)}" font-weight="700" '
                             f'font-family="{font_family}">{kl["label"]}</text>'
                         )
@@ -714,7 +719,8 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     for kl in _knockout_labels:
                         kfs = kl.get("font_size", 3)
                         svg += (
-                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"] + kfs * 0.35)}" text-anchor="middle" '
+                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"])}" text-anchor="middle" '
+                            f'dominant-baseline="central" '
                             f'fill="black" font-size="{_ff(kfs)}" font-weight="700" '
                             f'font-family="{font_family}">{kl["label"]}</text>'
                         )

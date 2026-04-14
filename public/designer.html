@@ -80,13 +80,13 @@
           </select>
         </div>
         <div class="field-row">
-          <div class="field"><label>H (mm)</label><input type="number" id="glassHeight" value="146" min="50" max="300" step="0.1" /></div>
-          <div class="field"><label>Top R</label><input type="number" id="glassTopR" value="43" min="10" max="100" step="0.1" /></div>
-          <div class="field"><label>Bot R</label><input type="number" id="glassBotR" value="30" min="10" max="100" step="0.1" /></div>
+          <div class="field"><label>H (mm)</label><input type="number" id="glassHeight" value="134.8" min="50" max="300" step="0.1" /></div>
+          <div class="field"><label>Top R</label><input type="number" id="glassTopR" value="44.2" min="10" max="100" step="0.1" /></div>
+          <div class="field"><label>Bot R</label><input type="number" id="glassBotR" value="31.6" min="10" max="100" step="0.1" /></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Wall (mm)</label><input type="number" id="glassWall" value="3" min="0" max="10" step="0.5" /></div>
-          <div class="field"><label>Base (mm)</label><input type="number" id="glassBase" value="5" min="0" max="15" step="0.5" /></div>
+          <div class="field"><label>Wall (mm)</label><input type="number" id="glassWall" value="3.1" min="0" max="10" step="0.5" /></div>
+          <div class="field"><label>Base (mm)</label><input type="number" id="glassBase" value="11.5" min="0" max="15" step="0.5" /></div>
         </div>
         <div class="field">
           <label>Fill mode</label>
@@ -355,11 +355,11 @@
       const firstRef = holes[0].ref, lastRef = holes[holes.length-1].ref;
       const rangeStr = `Holes ${firstRef}–${lastRef}`;
 
-      const glassHeight = parseFloat(document.getElementById("glassHeight").value) || 146;
-      const topR = parseFloat(document.getElementById("glassTopR").value) || 43;
-      const botR = parseFloat(document.getElementById("glassBotR").value) || 30;
-      const wallT = parseFloat(document.getElementById("glassWall").value) || 3;
-      const baseT = parseFloat(document.getElementById("glassBase").value) || 5;
+      const glassHeight = parseFloat(document.getElementById("glassHeight").value) || 134.8;
+      const topR = parseFloat(document.getElementById("glassTopR").value) || 44.2;
+      const botR = parseFloat(document.getElementById("glassBotR").value) || 31.6;
+      const wallT = parseFloat(document.getElementById("glassWall").value) || 3.1;
+      const baseT = parseFloat(document.getElementById("glassBase").value) || 11.5;
       const template = computeGlassTemplate({ glassHeight, topRadius: topR, bottomRadius: botR, wallThickness: wallT, baseThickness: baseT });
 
       // Compute padding based on fill mode
@@ -509,9 +509,9 @@
       const svg = document.getElementById("zoomInner").querySelector("svg");
       if (!svg) { setStatus("Nothing to print"); return; }
 
-      const glassH = parseFloat(document.getElementById("glassHeight").value) || 146;
-      const topR = parseFloat(document.getElementById("glassTopR").value) || 43;
-      const botR = parseFloat(document.getElementById("glassBotR").value) || 30;
+      const glassH = parseFloat(document.getElementById("glassHeight").value) || 134.8;
+      const topR = parseFloat(document.getElementById("glassTopR").value) || 44.2;
+      const botR = parseFloat(document.getElementById("glassBotR").value) || 31.6;
 
       const radiusDiff = topR - botR;
       const slantH = Math.sqrt(glassH * glassH + radiusDiff * radiusDiff);

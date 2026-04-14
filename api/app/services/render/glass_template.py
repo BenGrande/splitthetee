@@ -7,11 +7,11 @@ import math
 def compute_glass_template(opts: dict | None = None) -> dict:
     """Compute the unwrapped glass template geometry."""
     opts = opts or {}
-    glass_height = opts.get("glass_height", 146)
-    top_radius = opts.get("top_radius", 43)
-    bottom_radius = opts.get("bottom_radius", 30)
-    wall_thickness = opts.get("wall_thickness", 3)
-    base_thickness = opts.get("base_thickness", 5)
+    glass_height = opts.get("glass_height", 134.8)
+    top_radius = opts.get("top_radius", 44.2)
+    bottom_radius = opts.get("bottom_radius", 31.6)
+    wall_thickness = opts.get("wall_thickness", 3.1)
+    base_thickness = opts.get("base_thickness", 11.5)
 
     top_circumference = 2 * math.pi * top_radius
     bottom_circumference = 2 * math.pi * bottom_radius
@@ -68,9 +68,9 @@ def compute_fill_height(template: dict, volume_ml: float) -> dict:
     if volume_ml >= total_vol:
         return {"height_mm": glass_height, "fraction": 1.0}
 
-    inner_top_r = template["top_radius"] - template.get("wall_thickness", 3)
-    inner_bot_r = template["bottom_radius"] - template.get("wall_thickness", 3)
-    inner_h = glass_height - template.get("base_thickness", 5)
+    inner_top_r = template["top_radius"] - template.get("wall_thickness", 3.1)
+    inner_bot_r = template["bottom_radius"] - template.get("wall_thickness", 3.1)
+    inner_h = glass_height - template.get("base_thickness", 11.5)
     target_mm3 = volume_ml * 1000
 
     lo, hi = 0.0, inner_h
@@ -84,7 +84,7 @@ def compute_fill_height(template: dict, volume_ml: float) -> dict:
             hi = mid
 
     fill_h = (lo + hi) / 2
-    outer_fill_h = template.get("base_thickness", 5) + fill_h
+    outer_fill_h = template.get("base_thickness", 11.5) + fill_h
     return {"height_mm": outer_fill_h, "fraction": outer_fill_h / glass_height}
 
 
