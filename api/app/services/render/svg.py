@@ -594,6 +594,7 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
     _knockout_labels = []       # score text knockouts (green -1 + zone_label)
     _knockout_green_paths = []  # green polygon paths
     _knockout_zone_lines = []   # zone boundary polylines
+    _external_labels = []       # reserved for future use
 
     for hole in holes:
         for f in hole.get("features", []):
@@ -618,6 +619,16 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     "label": f.get("label", ""),
                     "font_size": f.get("font_size", 2),
                     "feature_cat": f.get("feature_cat"),
+                })
+
+            elif cat == "zone_label_external" and len(coords) >= 2:
+                _external_labels.append({
+                    "x": coords[0][0],
+                    "y": coords[0][1],
+                    "anchor_x": coords[1][0],
+                    "anchor_y": coords[1][1],
+                    "label": f.get("label", ""),
+                    "font_size": f.get("font_size", 1.8),
                 })
 
     svg += '<g class="layer-vinyl_features">'
@@ -740,9 +751,28 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     f'<path d="{d}" fill="#d2b48c" stroke="#d2b48c" '
                     f'stroke-width="0.2" opacity="1"/>'
                 )
-            elif cat in ("zone_line", "zone_label"):
-                continue  # only used in knockout masks, not rendered as visible elements
+            elif cat in ("zone_line", "zone_label", "zone_label_external"):
+                continue  # only used in knockout masks / external labels, not rendered as visible elements
     svg += "</g>"
+
+    # External zone labels (white text + dashed leader line for small zones)
+    if _white and _external_labels:
+        svg += '<g class="layer-external_zone_labels">'
+        for el in _external_labels:
+            efs = el["font_size"]
+            svg += (
+                f'<line x1="{_ff(el["x"])}" y1="{_ff(el["y"])}" '
+                f'x2="{_ff(el["anchor_x"])}" y2="{_ff(el["anchor_y"])}" '
+                f'stroke="#ffffff" stroke-width="0.15" stroke-dasharray="0.5,0.5" '
+                f'opacity="0.7"/>'
+            )
+            svg += (
+                f'<text x="{_ff(el["x"])}" y="{_ff(el["y"])}" text-anchor="middle" '
+                f'dominant-baseline="central" '
+                f'fill="#ffffff" font-size="{_ff(efs)}" font-weight="700" '
+                f'font-family="{font_family}" opacity="0.9">{el["label"]}</text>'
+            )
+        svg += '</g>'
 
     # White elements: hole number + stats combined boxes, ruler, text, logo, QR
     if _white:

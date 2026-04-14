@@ -273,7 +273,7 @@ def compute_all_scoring_zones(
         hole_i = holes[i]
         i_bottom = hole_i.get("end_y", hole_i["start_y"] + 50)
         for f in hole_i.get("features", []):
-            if f.get("category") in ("zone_line", "zone_label"):
+            if f.get("category") in ("zone_line", "zone_label", "zone_label_external"):
                 continue
             for _, y in f.get("coords", []):
                 i_bottom = max(i_bottom, y)
@@ -282,7 +282,7 @@ def compute_all_scoring_zones(
         hole_j = holes[i + 1]
         j_top = hole_j.get("start_y", hole_j.get("end_y", i_bottom + 20))
         for f in hole_j.get("features", []):
-            if f.get("category") in ("zone_line", "zone_label"):
+            if f.get("category") in ("zone_line", "zone_label", "zone_label_external"):
                 continue
             for _, y in f.get("coords", []):
                 j_top = min(j_top, y)
@@ -380,11 +380,11 @@ def add_scoring_features_to_layout(layout: dict, zones_by_hole: list[dict]) -> N
             y_mid = (y_lo + y_hi) / 2
             label = f"{score:+d}" if score != 0 else "0"
 
-            # Find best label position per filled feature using 2D grid sampling.
-            # For each candidate point, measure the minimum distance to the
-            # polygon boundary (approximated via edge segments). The point
-            # farthest from all edges is the most "interior" — the visual
-            # center of mass where the label fits best.
+            # Two-pass approach: first try knockouts in all features,
+            # then only create external labels if no knockout was placed.
+            has_knockout = False
+            pending_externals = []
+
             for f in hole.get("features", []):
                 fcat = f.get("category", "")
                 if fcat not in ("fairway", "water"):
@@ -468,7 +468,8 @@ def add_scoring_features_to_layout(layout: dict, zones_by_hole: list[dict]) -> N
                         best_pt = (cx, cy)
                         best_dist = ed
 
-                if best_pt and best_dist >= 0.5:
+                min_clearance = 1.5
+                if best_pt and best_dist >= min_clearance:
                     ko_fs = min(2, max(1, best_dist * 0.5))
                     hole["features"].append({
                         "category": "zone_label",
@@ -477,6 +478,44 @@ def add_scoring_features_to_layout(layout: dict, zones_by_hole: list[dict]) -> N
                         "font_size": ko_fs, "feature_cat": fcat,
                         "id": None, "ref": None, "par": None, "name": None,
                     })
+                    has_knockout = True
+                else:
+                    # Zone too small — queue external label (only used if no knockout placed)
+                    anchor_x, anchor_y = centroid_x, centroid_y
+                    nearest_edge_x, nearest_edge_y = anchor_x, anchor_y
+                    nearest_d = float("inf")
+                    for (ax, ay), (bx, by) in edges:
+                        dx, dy = bx - ax, by - ay
+                        if dx == 0 and dy == 0:
+                            continue
+                        t = max(0, min(1, ((anchor_x - ax) * dx + (anchor_y - ay) * dy) / (dx * dx + dy * dy)))
+                        px, py = ax + t * dx, ay + t * dy
+                        d = ((anchor_x - px) ** 2 + (anchor_y - py) ** 2) ** 0.5
+                        if d < nearest_d:
+                            nearest_d = d
+                            nearest_edge_x, nearest_edge_y = px, py
+                    dir_x = nearest_edge_x - anchor_x
+                    dir_y = nearest_edge_y - anchor_y
+                    dir_len = (dir_x ** 2 + dir_y ** 2) ** 0.5
+                    if dir_len > 0.01:
+                        dir_x /= dir_len
+                        dir_y /= dir_len
+                    else:
+                        dir_x, dir_y = 1, 0
+                    ext_x = nearest_edge_x + dir_x * 8
+                    ext_y = nearest_edge_y + dir_y * 8
+                    pending_externals.append({
+                        "category": "zone_label_external",
+                        "coords": [[ext_x, ext_y], [nearest_edge_x, nearest_edge_y]],
+                        "score": zone["score"], "label": label,
+                        "font_size": 1.8, "feature_cat": fcat,
+                        "id": None, "ref": None, "par": None, "name": None,
+                    })
+
+            # Only add external labels if no knockout was placed for this score
+            if not has_knockout and pending_externals:
+                # Just add the first one (avoid duplicates)
+                hole["features"].append(pending_externals[0])
 
 
 # --- Terrain-following scoring zones ---

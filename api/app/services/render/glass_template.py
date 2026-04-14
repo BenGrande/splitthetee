@@ -156,7 +156,7 @@ def warp_layout(layout: dict, template: dict, padding_opts: dict | None = None) 
 
         # Feature bounds (skip synthetic scoring features to avoid expanding bounds)
         for f in hole["features"]:
-            if f.get("category") in ("zone_line", "zone_label"):
+            if f.get("category") in ("zone_line", "zone_label", "zone_label_external"):
                 continue
             for x, y in f["coords"]:
                 min_x = min(min_x, x)
