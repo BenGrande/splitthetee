@@ -335,7 +335,7 @@ def _enforce_slope(holes):
 
 def _transform_hole_features(hole, start_x, start_y, end_x, end_y, max_width):
     """Transform a hole's geo-coordinate features to canvas space."""
-    route = hole.get("route_coords", [])
+    route = hole.get("route_coords") or hole.get("routeCoords", [])
     if not route or len(route) < 2:
         return []
 

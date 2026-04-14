@@ -605,81 +605,114 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                 )
         svg += "</g>"
 
-    # Score numbers on the course — rendered inside/near each green.
-    # In warped mode: use the green feature's centroid (already warped).
-    # In rect mode: use zone y-coordinates for vertical placement.
-    # The -1/0 scores go inside the green. Other scores are on the ruler only.
+    # Score numbers along each hole's routing line (tee → green).
+    # Each zone's score is placed proportionally along the tee→green vector,
+    # offset to the outside of the fairway with a dotted leader line.
+    # Works in both warped and rect modes since it uses warped coordinates.
+    _score_knockout_labels = []  # collected here, merged into _knockout_labels later
     if zones_by_hole and _white:
         svg += '<g class="layer-zone_scores">'
         for hi, zone_result in enumerate(zones_by_hole):
             if hi >= len(holes):
                 continue
             hole = holes[hi]
-
-            # Find green centroid from warped features
-            green_cx, green_cy = None, None
-            for f in hole.get("features", []):
-                if f.get("category") == "green" and f.get("coords"):
-                    coords = f["coords"]
-                    green_cx = sum(p[0] for p in coords) / len(coords)
-                    green_cy = sum(p[1] for p in coords) / len(coords)
-                    break
-
-            if green_cx is None:
+            zones = zone_result.get("zones", [])
+            if not zones:
                 continue
 
-            # Render -1 score OUTSIDE the green with a dotted leader line
-            # Find the bottom of the green to place label below it
-            green_ys = [p[1] for p in hole.get("features", [{}])[0].get("coords", [[0, 0]]) if True]
-            for f in hole.get("features", []):
-                if f.get("category") == "green" and f.get("coords"):
-                    green_ys = [p[1] for p in f["coords"]]
-                    break
-            green_bottom = max(green_ys) if green_ys else green_cy
+            # Tee and green positions (already warped in glass mode)
+            tee_x = hole.get("start_x", 0)
+            tee_y = hole.get("start_y", 0)
+            green_x = hole.get("end_x", tee_x)
+            green_y = hole.get("end_y", tee_y)
 
-            fs = 2.5 if is_warped else 3.5
-            label_y = green_bottom + fs + 1.5
-            # Dotted line from green centroid to label
-            svg += (
-                f'<line x1="{_ff(green_cx)}" y1="{_ff(green_bottom)}" '
-                f'x2="{_ff(green_cx)}" y2="{_ff(label_y - fs)}" '
-                f'stroke="#ffffff" stroke-dasharray="0.8,0.6" stroke-width="0.2" opacity="1"/>'
-            )
-            svg += (
-                f'<text x="{_ff(green_cx)}" y="{_ff(label_y)}" '
-                f'text-anchor="middle" fill="#ffffff" font-size="{_ff(fs)}" '
-                f'font-weight="700" font-family="{font_family}" '
-                f'opacity="1">-1</text>'
-            )
+            fs = 1.5 if is_warped else 2.2
+            min_band_for_knockout = 1 if is_warped else 1.5
 
-            if not is_warped:
-                # In rect mode, also render other scores along the fairway
-                xs = [hole.get("start_x", 0), hole.get("end_x", 0)]
+            # Filter: only above-green zones (+5 to 0) and green zone (-1).
+            above_zones = [z for z in zones if z.get("position") != "below"]
+            if not above_zones:
+                continue
+
+            total_above = len(above_zones)
+
+            # Evenly spaced band edges from tee_y to green_y
+            band_edges = []
+            for zi in range(total_above + 1):
+                t = zi / total_above
+                band_edges.append(tee_y + t * (green_y - tee_y))
+
+            # Knockout font size — must be large enough to be visible as cutouts.
+            # Scale based on band height: bigger bands get bigger numbers.
+            # Will be set per-zone below.
+
+            for zi, zone in enumerate(above_zones):
+                score = zone.get("score", 0)
+                label_text = f"{score:+d}" if score != 0 else "0"
+
+                if score == -1:
+                    continue  # -1 handled separately via green knockout
+
+                band_top = band_edges[zi]
+                band_bot = band_edges[zi + 1] if zi + 1 < len(band_edges) else green_y
+                band_h = abs(band_bot - band_top)
+                py = (band_top + band_bot) / 2
+
+                # Find best x-position PER filled feature where the shape has
+                # the greatest vertical thickness, favouring positions near center.
+                # If both fairway and water have enough space, place on both.
+                y_lo = min(band_top, band_bot)
+                y_hi = max(band_top, band_bot)
+
+                feature_placements = []  # {"cat", "x", "v_thickness"}
+
                 for f in hole.get("features", []):
-                    for px, _ in f.get("coords", []):
-                        xs.append(px)
-                hole_cx = (min(xs) + max(xs)) / 2
-
-                for zone in zone_result.get("zones", []):
-                    score = zone.get("score", 0)
-                    if score == -1:
-                        continue  # already rendered at green
-                    y_top = zone["y_top"]
-                    y_bot = zone["y_bottom"]
-                    zh = y_bot - y_top
-                    y_mid = (y_top + y_bot) / 2
-                    label = f"{score:+d}" if score != 0 else "0"
-
-                    if zh < 4:
+                    fcat = f.get("category", "")
+                    if fcat not in ("fairway", "water"):
+                        continue
+                    coords = f.get("coords", [])
+                    pts_in_band = [pt for pt in coords if y_lo <= pt[1] <= y_hi]
+                    if len(pts_in_band) < 2:
                         continue
 
-                    zfs = min(4, max(2, zh * 0.5))
-                    svg += (
-                        f'<text x="{_ff(hole_cx)}" y="{_ff(y_mid + zfs * 0.35)}" '
-                        f'text-anchor="middle" fill="#ffffff" font-size="{_ff(zfs)}" '
-                        f'font-weight="700" font-family="{font_family}" '
-                        f'opacity="1">{label}</text>'
-                    )
+                    x_min = min(p[0] for p in pts_in_band)
+                    x_max = max(p[0] for p in pts_in_band)
+                    x_span = x_max - x_min
+                    x_center = (x_min + x_max) / 2
+
+                    if x_span < 0.5:
+                        y_span = max(p[1] for p in pts_in_band) - min(p[1] for p in pts_in_band)
+                        feature_placements.append({"cat": fcat, "x": x_center, "v": y_span})
+                        continue
+
+                    # Sample 15 x-positions across the feature width.
+                    # Use wider margin (15% of span) to capture more points per sample.
+                    n_samples = 15
+                    margin = max(1.0, x_span * 0.15)
+                    candidates = []
+                    for si in range(n_samples):
+                        sx = x_min + (si + 0.5) * x_span / n_samples
+                        nearby_y = [p[1] for p in pts_in_band if abs(p[0] - sx) < margin]
+                        if len(nearby_y) >= 2:
+                            v_span = max(nearby_y) - min(nearby_y)
+                            dist_from_center = abs(sx - x_center) / (x_span / 2 + 0.01)
+                            center_bonus = 1.0 + 0.3 * max(0, 1.0 - dist_from_center)
+                            candidates.append({"x": sx, "v": v_span, "score": v_span * center_bonus})
+
+                    if candidates:
+                        best = max(candidates, key=lambda c: c["score"])
+                        feature_placements.append({"cat": fcat, "x": best["x"], "v": best["v"]})
+
+                # Place knockout only on features with enough thickness.
+                # If no feature has coverage at this band, skip entirely —
+                # the ruler already shows all scores.
+                for fp in feature_placements:
+                    if fp["v"] >= min_band_for_knockout:
+                        ko_fs = min(3, max(1.2, min(band_h, fp["v"]) * 0.5))
+                        _score_knockout_labels.append({
+                            "x": fp["x"], "y": py, "label": label_text,
+                            "font_size": ko_fs,
+                        })
         svg += "</g>"
 
     # Feature layers
@@ -688,22 +721,52 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
     _GREEN_CATS = {"green", "tee"}
     _BLUE_CATS = {"water"}
 
-    # Collect knockout info for masks.
-    # 1. Green polygon paths — cut out of fairway fill so green interior is transparent
-    # 2. Score labels at green centroids — cut out as text
+    # Collect knockout info for fairway masks:
+    # 1. Green polygon paths — cut out so green interior is transparent
+    # 2. Zone boundary lines — horizontal transparent cuts at each zone edge
     _knockout_labels = []
-    _knockout_green_paths = []  # SVG path strings for green polygons to cut from fairway
-    for hole in holes:
+    _knockout_green_paths = []
+    _knockout_zone_lines = []  # list of y-coordinates for horizontal cuts
+
+    for hi, hole in enumerate(holes):
         for f in hole.get("features", []):
             if f.get("category") == "green" and f.get("coords") and len(f["coords"]) >= 3:
                 coords = f["coords"]
                 gx = sum(p[0] for p in coords) / len(coords)
                 gy = sum(p[1] for p in coords) / len(coords)
                 _knockout_labels.append({"x": gx, "y": gy, "label": "-1"})
-                # Build path for green polygon knockout
                 gd = _coords_to_path(coords, closed=True)
                 if gd:
                     _knockout_green_paths.append(gd)
+
+        # Compute zone boundary positions along the tee→green line
+        if hi < len(zones_by_hole):
+            zr = zones_by_hole[hi]
+            zone_list = zr.get("zones", [])
+            # Horizontal cutout lines across fairway at zone boundaries
+            above_zones_l = [z for z in zone_list if z.get("position") != "below"]
+            if len(above_zones_l) > 1:
+                h_tee_y = hole.get("start_y", 0)
+                h_green_y = hole.get("end_y", h_tee_y)
+                # Get fairway x-extent
+                fw_min_x = hole.get("start_x", 0) - 20
+                fw_max_x = hole.get("start_x", 0) + 20
+                for f in hole.get("features", []):
+                    if f.get("category") == "fairway":
+                        for pt in f.get("coords", []):
+                            fw_min_x = min(fw_min_x, pt[0])
+                            fw_max_x = max(fw_max_x, pt[0])
+
+                total_al = len(above_zones_l)
+                for zi in range(1, total_al):
+                    t = zi / total_al
+                    by = h_tee_y + t * (h_green_y - h_tee_y)
+                    _knockout_zone_lines.append({
+                        "y": by, "x_min": fw_min_x - 5, "x_max": fw_max_x + 5
+                    })
+
+    # Merge score knockout labels collected during zone rendering
+    _knockout_labels.extend(_score_knockout_labels)
 
     svg += '<g class="layer-vinyl_features">'
 
@@ -731,12 +794,26 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                 # Solid green fill with green polygon + score text knocked out.
                 # Green interiors become transparent (bare glass = dark background).
                 mid = f"fwMask{_filled_idx}"
-                has_knockouts = _knockout_green_paths or _knockout_labels
+                has_knockouts = _knockout_green_paths or _knockout_zone_lines or _knockout_labels
                 if has_knockouts:
                     svg += f'<mask id="{mid}"><rect x="-9999" y="-9999" width="99999" height="99999" fill="white"/>'
-                    # Cut out green polygon shapes (black = transparent in mask)
+                    # Cut out green polygon shapes
                     for gpath in _knockout_green_paths:
                         svg += f'<path d="{gpath}" fill="black"/>'
+                    # Cut out horizontal zone boundary lines
+                    for zl in _knockout_zone_lines:
+                        svg += (
+                            f'<rect x="{_ff(zl["x_min"])}" y="{_ff(zl["y"] - 0.08)}" '
+                            f'width="{_ff(zl["x_max"] - zl["x_min"])}" height="0.16" fill="black"/>'
+                        )
+                    # Cut out score number text
+                    for kl in _knockout_labels:
+                        kfs = kl.get("font_size", 3)
+                        svg += (
+                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"] + kfs * 0.35)}" text-anchor="middle" '
+                            f'fill="black" font-size="{_ff(kfs)}" font-weight="700" '
+                            f'font-family="{font_family}">{kl["label"]}</text>'
+                        )
                     svg += '</mask>'
                     svg += (
                         f'<path d="{d}" fill="#4ade80" stroke="#4ade80" '
@@ -776,14 +853,23 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                         f'fill="#ffffff" opacity="1"/>'
                     )
             elif cat in _BLUE_CATS and _blue:
-                # Solid blue fill with score knockout mask
+                # Solid blue fill with zone lines + score knockouts
                 mid = f"wtMask{_filled_idx}"
-                if _knockout_labels:
+                has_water_ko = _knockout_labels or _knockout_zone_lines
+                if has_water_ko:
                     svg += f'<mask id="{mid}"><rect x="-9999" y="-9999" width="99999" height="99999" fill="white"/>'
-                    for kl in _knockout_labels:
+                    # Zone boundary lines
+                    for zl in _knockout_zone_lines:
                         svg += (
-                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"] + 1.5)}" text-anchor="middle" '
-                            f'fill="black" font-size="5" font-weight="700" '
+                            f'<rect x="{_ff(zl["x_min"])}" y="{_ff(zl["y"] - 0.08)}" '
+                            f'width="{_ff(zl["x_max"] - zl["x_min"])}" height="0.16" fill="black"/>'
+                        )
+                    # Score number knockouts
+                    for kl in _knockout_labels:
+                        kfs = kl.get("font_size", 3)
+                        svg += (
+                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"] + kfs * 0.35)}" text-anchor="middle" '
+                            f'fill="black" font-size="{_ff(kfs)}" font-weight="700" '
                             f'font-family="{font_family}">{kl["label"]}</text>'
                         )
                     svg += '</mask>'
@@ -825,6 +911,12 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
 
     if is_warped:
         svg += "</g>"  # close clip group
+        # Glass outline as a cut guide (visible stroke)
+        from app.services.render.glass_template import glass_wrap_path as _gwp2
+        svg += (
+            f'<path d="{_gwp2(layout["template"])}" fill="none" '
+            f'stroke="#ffffff" stroke-width="0.3" opacity="1"/>'
+        )
 
     if _white:
         # Course name + hole range
@@ -841,6 +933,80 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
         # QR code
         if opts.get("qr_svg"):
             svg += _render_embedded_qr(layout, opts)
+
+    # Debug overlay: red arcs at each zone boundary following glass curvature.
+    if opts.get("show_score_lines") and zones_by_hole:
+        svg += '<g class="layer-debug-score-lines">'
+
+        if is_warped:
+            tmpl = layout.get("template", {})
+            half_a = tmpl.get("sector_angle", 1) / 2
+            large_arc = 1 if half_a * 2 > math.pi else 0
+
+            for hi, zone_result in enumerate(zones_by_hole):
+                if hi >= len(holes):
+                    continue
+                hole = holes[hi]
+                # In warped space, tee/green y are negative (y = -r * cos(angle))
+                # At the sector center (angle=0), r = abs(y)
+                # Interpolate radius between tee and green
+                tee_r = abs(hole["start_y"])
+                green_r = abs(hole["end_y"])
+
+                above = [z for z in zone_result.get("zones", []) if z.get("position") != "below"]
+                total = len(above)
+                if total < 1:
+                    continue
+
+                for zi in range(total + 1):
+                    tt = zi / total
+                    r = tee_r + tt * (green_r - tee_r)
+                    # Arc from left edge to right edge of sector
+                    x1 = -r * math.sin(half_a)
+                    y1 = -r * math.cos(half_a)
+                    x2 = r * math.sin(half_a)
+                    y2 = -r * math.cos(half_a)
+                    svg += (
+                        f'<path d="M{_ff(x1)},{_ff(y1)} A{_ff(r)},{_ff(r)} 0 {large_arc} 1 {_ff(x2)},{_ff(y2)}" '
+                        f'fill="none" stroke="#ff0000" stroke-width="0.3" opacity="0.6"/>'
+                    )
+                    # Label at right edge, at the TOP of the zone (same line)
+                    if zi < total:
+                        label = above[zi]["label"]
+                        lx = r * math.sin(half_a) + 2
+                        ly = -r * math.cos(half_a)
+                        svg += (
+                            f'<text x="{_ff(lx)}" y="{_ff(ly + 0.8)}" '
+                            f'text-anchor="start" fill="#ff0000" font-size="2" '
+                            f'font-weight="700" font-family="Arial">{_esc_xml(label)}</text>'
+                        )
+        else:
+            # Rect mode: full-width horizontal lines
+            cw = layout.get("canvas_width", 900)
+            for hi, zone_result in enumerate(zones_by_hole):
+                if hi >= len(holes):
+                    continue
+                hole = holes[hi]
+                above = [z for z in zone_result.get("zones", []) if z.get("position") != "below"]
+                total = len(above)
+                if total < 1:
+                    continue
+                for zi in range(total + 1):
+                    tt = zi / total
+                    line_y = hole["start_y"] + tt * (hole["end_y"] - hole["start_y"])
+                    svg += (
+                        f'<line x1="0" y1="{_ff(line_y)}" x2="{cw}" y2="{_ff(line_y)}" '
+                        f'stroke="#ff0000" stroke-width="0.4" opacity="0.6"/>'
+                    )
+                    if zi < total:
+                        label = above[zi]["label"]
+                        mid_y = line_y  # label at top of zone (same as the line)
+                        svg += (
+                            f'<text x="{cw - 2}" y="{_ff(mid_y + 1)}" '
+                            f'text-anchor="end" fill="#ff0000" font-size="3" '
+                            f'font-weight="700" font-family="Arial">{_esc_xml(label)}</text>'
+                        )
+        svg += "</g>"
 
     svg += "</svg>"
     return svg

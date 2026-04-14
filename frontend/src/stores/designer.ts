@@ -79,6 +79,7 @@ export const useDesignerStore = defineStore('designer', () => {
   const logoDataUrl = ref<string | null>(null)
   const showText = ref(true)
   const perHoleColors = ref(true)
+  const showScoreLines = ref(false)
 
   const svgContent = ref('')
   const loading = ref(false)
@@ -120,12 +121,59 @@ export const useDesignerStore = defineStore('designer', () => {
     const radiusDiff = d.topRadius - d.bottomRadius
     const slantH = Math.sqrt(d.height * d.height + radiusDiff * radiusDiff)
     const topCirc = 2 * Math.PI * d.topRadius
+
+    // The SVG viewBox units ARE mm (1 unit = 1 mm).
+    // Extract viewBox to get the actual print dimensions.
+    const vbMatch = svgContent.value.match(/viewBox="([^"]+)"/)
+    let vbW = 283, vbH = 176
+    if (vbMatch) {
+      const parts = vbMatch[1].split(/\s+/).map(Number)
+      vbW = parts[2]
+      vbH = parts[3]
+    }
+
+    // Print at actual size (1:1) or scale down to fit paper
     const paperW = 279.4, paperH = 215.9, marginMm = 4
     const availW = paperW - marginMm * 2
     const availH = paperH - marginMm * 2 - 15
-    const scale = Math.min(availW / topCirc, availH / slantH, 1)
-    const printW = topCirc * scale
+    const scale = Math.min(availW / vbW, availH / vbH, 1)
+    const printW = vbW * scale
     const scalePercent = (scale * 100).toFixed(0)
+
+    // Invert SVG colors for print: white bg, black elements.
+    // Use placeholders to avoid double-replacement.
+    // Fix SVG width/height to use mm units so browser scales correctly
+    let printSvg = svgContent.value
+      .replace(/width="\d+"/, `width="${printW.toFixed(1)}mm"`)
+      .replace(/height="\d+"/, `height="${(vbH * scale).toFixed(1)}mm"`)
+
+    // Strip out all <mask> elements before color inversion, then add them back.
+    // Masks use fill="white"/fill="black" for visibility which must not be inverted.
+    const masks: string[] = []
+    printSvg = printSvg.replace(/<mask[^>]*>.*?<\/mask>/gs, (match) => {
+      masks.push(match)
+      return `__MASK_${masks.length - 1}__`
+    })
+
+    // Invert colors: dark bg → white, white elements → black
+    printSvg = printSvg
+      .replace(/fill="#1a1a1a"/g, 'fill="__WHITEBG__"')
+      .replace(/fill="#ffffff"/g, 'fill="#000000"')
+      .replace(/fill="white"/g, 'fill="black"')
+      .replace(/stroke="#ffffff"/g, 'stroke="#000000"')
+      .replace(/stroke="white"/g, 'stroke="black"')
+      .replace(/fill="__WHITEBG__"/g, 'fill="#ffffff"')
+      // Darken colored fills for contrast on white paper
+      .replace(/fill="#4ade80"/g, 'fill="#2d8f2d"')
+      .replace(/stroke="#4ade80"/g, 'stroke="#1a6b1a"')
+      .replace(/fill="#3b82f6"/g, 'fill="#2563eb"')
+      .replace(/stroke="#3b82f6"/g, 'stroke="#1d4ed8"')
+      .replace(/fill="#d2b48c"/g, 'fill="#a0845c"')
+
+    // Restore masks untouched
+    masks.forEach((m, i) => {
+      printSvg = printSvg.replace(`__MASK_${i}__`, m)
+    })
 
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
@@ -134,7 +182,7 @@ export const useDesignerStore = defineStore('designer', () => {
 <style>
 @page { size: landscape; margin: ${marginMm}mm; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Arial, sans-serif; }
+body { margin: 0; font-family: Arial, sans-serif; background: #fff; }
 .info { font-size: 8pt; color: #666; margin: 0 0 2mm 0; }
 .info strong { color: #333; }
 .wrap-outer { width: ${printW.toFixed(1)}mm; overflow: visible; margin: 0 auto; }
@@ -142,8 +190,8 @@ body { margin: 0; font-family: Arial, sans-serif; }
 .scale-ruler { margin: 2mm auto 0; width: 100mm; height: 4mm; border: 0.3mm solid #000; text-align: center; font-size: 7pt; line-height: 4mm; color: #333; }
 @media print { .no-print { display: none !important; } }
 </style></head><body>
-<div class="info"><strong>${courseName.value || 'Course'}</strong> — Glass ${currentGlass.value + 1} | <strong>${scalePercent}% scale</strong>${scale >= 0.99 ? ' (actual size)' : ''} | Wrap: ${topCirc.toFixed(0)}mm × ${slantH.toFixed(0)}mm | Glass: H=${d.height}mm, Top⌀=${(d.topRadius * 2).toFixed(0)}mm, Bot⌀=${(d.bottomRadius * 2).toFixed(0)}mm</div>
-<div class="wrap-outer">${svgContent.value}</div>
+<div class="info"><strong>${courseName.value || 'Course'}</strong> — Glass ${currentGlass.value + 1} | <strong>${(scale * 100).toFixed(0)}% scale</strong>${scale >= 0.99 ? ' (actual size)' : ''} | Wrap: ${topCirc.toFixed(0)}mm × ${slantH.toFixed(0)}mm | Glass: H=${d.height}mm, Top⌀=${(d.topRadius * 2).toFixed(0)}mm, Bot⌀=${(d.bottomRadius * 2).toFixed(0)}mm</div>
+<div class="wrap-outer">${printSvg}</div>
 <div class="scale-ruler">100mm ruler — verify print scale</div>
 <div style="text-align:center;margin-top:2mm;">
 <span style="font-size:7pt;color:#888;">Cut along glass outline. Top edge = lip of glass.</span><br>
@@ -299,6 +347,7 @@ body { margin: 0; font-family: Arial, sans-serif; }
       show_text: showText.value,
       per_hole_colors: perHoleColors.value,
       logo_data_url: logoDataUrl.value,
+      show_score_lines: showScoreLines.value,
     }
   }
 
@@ -514,6 +563,7 @@ body { margin: 0; font-family: Arial, sans-serif; }
     logoDataUrl,
     showText,
     perHoleColors,
+    showScoreLines,
     courseName,
     svgContent,
     loading,

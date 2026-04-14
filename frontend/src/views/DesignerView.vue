@@ -294,6 +294,14 @@ function glassInfo(): string {
               : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'"
             :title="`${mode.label} mode (${mode.key})`"
           >{{ mode.label }}</button>
+          <button
+            @click="designer.showScoreLines = !designer.showScoreLines; triggerRender()"
+            class="px-3 py-1 text-xs rounded border transition-colors"
+            :class="designer.showScoreLines
+              ? 'bg-yellow-900/50 border-yellow-600 text-yellow-400'
+              : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'"
+            title="Toggle score zone lines overlay"
+          >{{ designer.showScoreLines ? 'Lines ON' : 'Lines' }}</button>
           <button @click="handleResetZoom" class="px-3 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-400 hover:border-gray-600 transition-colors">
             Reset Zoom
           </button>

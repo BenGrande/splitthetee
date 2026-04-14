@@ -145,6 +145,7 @@ async def render(data: dict):
             "zones_by_hole": zones_by_hole,
             "scoring_preview": mode in ("scoring-preview", "vinyl-preview"),
             "qr_svg": options.get("qr_svg"),
+            "show_score_lines": options.get("show_score_lines", False),
         }
         if mode in ("glass", "vinyl-preview", "scoring-preview"):
             if mode in ("glass", "vinyl-preview"):
