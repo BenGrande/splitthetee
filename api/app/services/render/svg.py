@@ -204,7 +204,7 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
             svg += (
                 f'<rect x="{_ff(hole_x)}" y="{_ff(section_top)}" '
                 f'width="{_ff(hole_col_w)}" height="{_ff(section_h)}" rx="1.5" '
-                f'fill="white" stroke="none" opacity="0.85"/>'
+                f'fill="white" stroke="none" opacity="1"/>'
             )
             hcx = hole_x + hole_col_w / 2
             hcy = section_top + section_h / 2
@@ -219,7 +219,7 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
             svg += (
                 f'<rect x="{_ff(hole_x)}" y="{_ff(section_top)}" '
                 f'width="{_ff(hole_col_w)}" height="{_ff(section_h)}" rx="1.5" '
-                f'fill="none" stroke="white" stroke-width="0.5" opacity="0.85"/>'
+                f'fill="none" stroke="white" stroke-width="0.5" opacity="1"/>'
             )
             hcx = hole_x + hole_col_w / 2
             hcy = section_top + section_h / 2
@@ -251,7 +251,7 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
                 svg += (
                     f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
                     f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
-                    f'fill="white" stroke="none" opacity="0.8"/>'
+                    f'fill="white" stroke="none" opacity="1"/>'
                 )
                 if zh >= 4:  # only render text if zone tall enough
                     svg += (
@@ -263,7 +263,7 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
                 svg += (
                     f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
                     f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
-                    f'fill="none" stroke="white" stroke-width="0.5" opacity="0.7"/>'
+                    f'fill="none" stroke="white" stroke-width="0.5" opacity="1"/>'
                 )
                 if zh >= 4:
                     svg += (
@@ -364,10 +364,7 @@ def _render_terrain_zones(terrain_zones: list, opts: dict, font_family: str,
 def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
     """Render par/yardage/handicap in a small rounded rectangle.
 
-    Positioned on the OUTER side of the hole number circle (away from the
-    fairway direction).
-    - direction > 0 (left-to-right): stats go LEFT of hole number
-    - direction < 0 (right-to-left): stats go RIGHT of hole number
+    Positioned on the OUTER side of the hole number circle (away from fairway).
     """
     lines = []
     if hole.get("par"):
@@ -381,11 +378,11 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
         return ""
 
     is_warped = opts.get("vinyl_preview") and opts.get("is_warped")
-    font_size = 2.2 if is_warped else 3
-    line_height = font_size + 1
-    padding_x = 1.5
-    padding_y = 1.5
-    box_w = 16 if is_warped else 20
+    font_size = 1.8 if is_warped else 2.8
+    line_height = font_size + 0.8
+    padding_x = 1.2
+    padding_y = 1
+    box_w = 13 if is_warped else 17
     box_h = padding_y * 2 + line_height * len(lines)
 
     # Hole number position
@@ -396,21 +393,17 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
     hole_num_y = hole.get("start_y", 0) + cr + 4
 
     if direction > 0:
-        # Hole goes left-to-right — stats go LEFT of hole number
         box_x = hole_num_x - cr - 1 - box_w
     else:
-        # Hole goes right-to-left — stats go RIGHT of hole number
         box_x = hole_num_x + cr + 1
 
-    # Vertical: centered on hole number
     box_y = hole_num_y - box_h / 2
-
     text_x = box_x + padding_x
 
     svg = (
         f'<rect x="{_ff(box_x)}" y="{_ff(box_y)}" '
-        f'width="{_ff(box_w)}" height="{_ff(box_h)}" rx="1.5" '
-        f'fill="none" stroke="#ffffff" stroke-width="0.3" opacity="0.7"/>'
+        f'width="{_ff(box_w)}" height="{_ff(box_h)}" rx="1" '
+        f'fill="none" stroke="#ffffff" stroke-width="0.2" opacity="1"/>'
     )
 
     for i, line in enumerate(lines):
@@ -418,7 +411,7 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
         svg += (
             f'<text x="{_ff(text_x)}" y="{_ff(ty)}" '
             f'text-anchor="start" fill="white" font-size="{font_size}" '
-            f'font-family="{font_family}" opacity="0.7">{_esc_xml(line)}</text>'
+            f'font-family="{font_family}" opacity="1">{_esc_xml(line)}</text>'
         )
 
     return svg
@@ -548,7 +541,7 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                 svg += (
                     f'<line x1="{_ff(x_left)}" y1="{_ff(y)}" '
                     f'x2="{_ff(x_right)}" y2="{_ff(y)}" '
-                    f'stroke="#ffffff" stroke-width="0.2" opacity="0.25"/>'
+                    f'stroke="#ffffff" stroke-width="0.15" opacity="1"/>'
                 )
         svg += "</g>"
 
@@ -576,18 +569,12 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                 continue
 
             # Render -1 score at green center (this IS the knockout label)
-            fs = 3 if is_warped else 4
-            svg += (
-                f'<text x="{_ff(green_cx)}" y="{_ff(green_cy + fs * 0.35)}" '
-                f'text-anchor="middle" fill="#000000" font-size="{_ff(fs)}" '
-                f'font-weight="700" font-family="{font_family}" '
-                f'opacity="0.5" stroke="#000000" stroke-width="1.5">-1</text>'
-            )
+            fs = 4 if is_warped else 5
             svg += (
                 f'<text x="{_ff(green_cx)}" y="{_ff(green_cy + fs * 0.35)}" '
                 f'text-anchor="middle" fill="#ffffff" font-size="{_ff(fs)}" '
                 f'font-weight="700" font-family="{font_family}" '
-                f'opacity="0.9">-1</text>'
+                f'opacity="1">-1</text>'
             )
 
             if not is_warped:
@@ -614,15 +601,9 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     zfs = min(4, max(2, zh * 0.5))
                     svg += (
                         f'<text x="{_ff(hole_cx)}" y="{_ff(y_mid + zfs * 0.35)}" '
-                        f'text-anchor="middle" fill="#000000" font-size="{_ff(zfs)}" '
-                        f'font-weight="700" font-family="{font_family}" '
-                        f'opacity="0.4" stroke="#000000" stroke-width="1.5">{label}</text>'
-                    )
-                    svg += (
-                        f'<text x="{_ff(hole_cx)}" y="{_ff(y_mid + zfs * 0.35)}" '
                         f'text-anchor="middle" fill="#ffffff" font-size="{_ff(zfs)}" '
                         f'font-weight="700" font-family="{font_family}" '
-                        f'opacity="0.8">{label}</text>'
+                        f'opacity="1">{label}</text>'
                     )
         svg += "</g>"
 
@@ -632,10 +613,11 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
     _GREEN_CATS = {"green", "tee"}
     _BLUE_CATS = {"water"}
 
-    # Collect score label positions for knockout masks.
-    # These labels are CUT OUT of the green/fairway fills (bare glass shows through).
-    # Primary source: green centroids for -1 score.
+    # Collect knockout info for masks.
+    # 1. Green polygon paths — cut out of fairway fill so green interior is transparent
+    # 2. Score labels at green centroids — cut out as text
     _knockout_labels = []
+    _knockout_green_paths = []  # SVG path strings for green polygons to cut from fairway
     for hole in holes:
         for f in hole.get("features", []):
             if f.get("category") == "green" and f.get("coords") and len(f["coords"]) >= 3:
@@ -643,13 +625,23 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                 gx = sum(p[0] for p in coords) / len(coords)
                 gy = sum(p[1] for p in coords) / len(coords)
                 _knockout_labels.append({"x": gx, "y": gy, "label": "-1"})
+                # Build path for green polygon knockout
+                gd = _coords_to_path(coords, closed=True)
+                if gd:
+                    _knockout_green_paths.append(gd)
 
     svg += '<g class="layer-vinyl_features">'
 
-    # Render features filtered by layer
+    # Render features in z-order: rough, water, fairway, bunker, tee, green
+    # Only render ONE green outline + flag per hole to avoid concentric rings
+    _RENDER_ORDER = ["rough", "path", "course_boundary", "water", "fairway", "bunker", "tee", "green"]
     _filled_idx = 0
+    _green_rendered = set()  # track which holes already have a green rendered
     for hole in holes:
-        for feat in hole.get("features", []):
+        feats = hole.get("features", [])
+        sorted_feats = sorted(feats, key=lambda f: _RENDER_ORDER.index(f.get("category", "")) if f.get("category", "") in _RENDER_ORDER else 99)
+        _hole_id = id(hole)
+        for feat in sorted_feats:
             cat = feat.get("category", "")
             d = _coords_to_path(feat.get("coords", []), cat != "path")
             if not d:
@@ -658,35 +650,39 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
             if cat in _WHITE_CATS and _white:
                 svg += (
                     f'<path d="{d}" fill="none" stroke="#ffffff" '
-                    f'stroke-width="0.2" opacity="0.6"/>'
+                    f'stroke-width="0.15" opacity="1"/>'
                 )
             elif cat in _GREEN_FILL_CATS and _green:
-                # Solid green fill with score knockout mask
+                # Solid green fill with green polygon + score text knocked out.
+                # Green interiors become transparent (bare glass = dark background).
                 mid = f"fwMask{_filled_idx}"
-                if _knockout_labels:
+                has_knockouts = _knockout_green_paths or _knockout_labels
+                if has_knockouts:
                     svg += f'<mask id="{mid}"><rect x="-9999" y="-9999" width="99999" height="99999" fill="white"/>'
-                    for kl in _knockout_labels:
-                        svg += (
-                            f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"] + 1.5)}" text-anchor="middle" '
-                            f'fill="black" font-size="4" font-weight="700" '
-                            f'font-family="{font_family}">{kl["label"]}</text>'
-                        )
+                    # Cut out green polygon shapes (black = transparent in mask)
+                    for gpath in _knockout_green_paths:
+                        svg += f'<path d="{gpath}" fill="black"/>'
                     svg += '</mask>'
                     svg += (
                         f'<path d="{d}" fill="#4ade80" stroke="#4ade80" '
-                        f'stroke-width="0.2" opacity="0.85" mask="url(#{mid})"/>'
+                        f'stroke-width="0.2" opacity="1" mask="url(#{mid})"/>'
                     )
                 else:
                     svg += (
                         f'<path d="{d}" fill="#4ade80" stroke="#4ade80" '
-                        f'stroke-width="0.2" opacity="0.85"/>'
+                        f'stroke-width="0.2" opacity="1"/>'
                     )
                 _filled_idx += 1
             elif cat in _GREEN_CATS and _green:
+                # For greens: only render ONE outline + flag per hole
+                if cat == "green" and _hole_id in _green_rendered:
+                    continue
+                if cat == "green":
+                    _green_rendered.add(_hole_id)
                 sw = "0.2" if cat == "tee" else "0.3"
                 svg += (
                     f'<path d="{d}" fill="none" stroke="#4ade80" '
-                    f'stroke-width="{sw}" opacity="0.85"/>'
+                    f'stroke-width="{sw}" opacity="1"/>'
                 )
                 # Flag marker inside green (no circle — just flag pole + triangle)
                 if cat == "green" and feat.get("coords"):
@@ -697,12 +693,12 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     svg += (
                         f'<line x1="{_ff(gx)}" y1="{_ff(gy)}" '
                         f'x2="{_ff(gx)}" y2="{_ff(gy - 4)}" '
-                        f'stroke="#ffffff" stroke-width="0.3" opacity="0.8"/>'
+                        f'stroke="#ffffff" stroke-width="0.3" opacity="1"/>'
                     )
                     svg += (
                         f'<path d="M{_ff(gx)},{_ff(gy - 4)}L{_ff(gx + 2.5)},{_ff(gy - 3)}'
                         f'L{_ff(gx)},{_ff(gy - 2)}Z" '
-                        f'fill="#ffffff" opacity="0.8"/>'
+                        f'fill="#ffffff" opacity="1"/>'
                     )
             elif cat in _BLUE_CATS and _blue:
                 # Solid blue fill with score knockout mask
@@ -712,24 +708,24 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                     for kl in _knockout_labels:
                         svg += (
                             f'<text x="{_ff(kl["x"])}" y="{_ff(kl["y"] + 1.5)}" text-anchor="middle" '
-                            f'fill="black" font-size="4" font-weight="700" '
+                            f'fill="black" font-size="5" font-weight="700" '
                             f'font-family="{font_family}">{kl["label"]}</text>'
                         )
                     svg += '</mask>'
                     svg += (
                         f'<path d="{d}" fill="#3b82f6" stroke="#3b82f6" '
-                        f'stroke-width="0.2" opacity="0.7" mask="url(#{mid})"/>'
+                        f'stroke-width="0.2" opacity="1" mask="url(#{mid})"/>'
                     )
                 else:
                     svg += (
                         f'<path d="{d}" fill="#3b82f6" stroke="#3b82f6" '
-                        f'stroke-width="0.2" opacity="0.7"/>'
+                        f'stroke-width="0.2" opacity="1"/>'
                     )
                 _filled_idx += 1
             elif cat == "bunker" and _tan:
                 svg += (
                     f'<path d="{d}" fill="#d2b48c" stroke="#d2b48c" '
-                    f'stroke-width="0.2" opacity="0.8"/>'
+                    f'stroke-width="0.2" opacity="1"/>'
                 )
     svg += "</g>"
 
@@ -745,12 +741,12 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
             ly = hole["start_y"] + cr + 4
             svg += (
                 f'<circle cx="{_ff(lx)}" cy="{_ff(ly)}" r="{cr}" '
-                f'fill="none" stroke="#ffffff" stroke-width="0.5" opacity="0.8"/>'
+                f'fill="none" stroke="#ffffff" stroke-width="0.5" opacity="1"/>'
             )
             svg += (
                 f'<text x="{_ff(lx)}" y="{_ff(ly + sz * 0.38)}" text-anchor="middle" '
                 f'fill="#ffffff" font-size="{sz}" font-weight="700" '
-                f'font-family="{font_family}" opacity="0.9">{hole.get("ref", "")}</text>'
+                f'font-family="{font_family}" opacity="1">{hole.get("ref", "")}</text>'
             )
         svg += "</g>"
 
@@ -768,7 +764,7 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
                 svg += (
                     f'<line x1="{_ff(lx)}" y1="{_ff(ly)}" '
                     f'x2="{_ff(tx)}" y2="{_ff(ty)}" '
-                    f'stroke="#ffffff" stroke-dasharray="2,2" stroke-width="0.5" opacity="0.4"/>'
+                    f'stroke="#ffffff" stroke-dasharray="2,2" stroke-width="0.5" opacity="1"/>'
                 )
         svg += "</g>"
 
@@ -856,41 +852,64 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
 
     svg = '<g class="layer-ruler">'
 
+    # Enforce non-overlapping holes: each hole's zone section must not
+    # extend into the next hole's section. Compute adjusted boundaries.
+    adjusted_sections = []
+    for hi, zone_result in enumerate(zones_by_hole):
+        zones = zone_result.get("zones", [])
+        if not zones:
+            adjusted_sections.append(None)
+            continue
+        r_top = _y_to_r(zones[0]["y_top"])
+        r_bot = _y_to_r(zones[-1]["y_bottom"])
+        adjusted_sections.append({"r_top": r_top, "r_bot": r_bot})
+
+    # Enforce minimum gap between sections
+    ruler_gap = 1.5
+    for hi in range(1, len(adjusted_sections)):
+        prev = adjusted_sections[hi - 1]
+        curr = adjusted_sections[hi]
+        if prev is None or curr is None:
+            continue
+        # prev r_bot should be > curr r_top (r decreases going down glass)
+        # Actually: r_top > r_bot for each section (top of glass = larger r)
+        # And prev section is above curr section, so prev.r_bot > curr.r_top
+        overlap = curr["r_top"] - prev["r_bot"] + ruler_gap
+        if overlap > 0:
+            # Shrink previous section's bottom and current section's top
+            half = overlap / 2
+            prev["r_bot"] += half
+            curr["r_top"] -= half
+
     for hi, zone_result in enumerate(zones_by_hole):
         hole_ref = zone_result.get("hole_ref", "")
         zones = zone_result.get("zones", [])
-        if not zones:
+        if not zones or hi >= len(adjusted_sections) or adjusted_sections[hi] is None:
             continue
 
-        section_top = zones[0]["y_top"]
-        section_bottom = zones[-1]["y_bottom"]
+        adj = adjusted_sections[hi]
+        section_r_top = adj["r_top"]
+        section_r_bot = adj["r_bot"]
+        total_section = abs(section_r_top - section_r_bot)
+
+        if total_section < 3:
+            continue
+
         is_odd = (hole_ref % 2 == 1) if isinstance(hole_ref, int) else True
 
-        r_top = _y_to_r(section_top)
-        r_bot = _y_to_r(section_bottom)
-        section_r = abs(r_top - r_bot)
-
-        if section_r < 5:
-            continue
-
-        # --- Hole number rect ---
-        # Small fixed-height rect at top of section
-        hole_rect_h = min(12, section_r * 0.2)
-        ry_top = -r_top  # SVG y = -r (so outer_r is most negative = top)
+        # Hole number rect: spans FULL adjusted section height
+        hn_h = total_section
+        ry_top = -section_r_top
 
         svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
 
-        # Hole number rect with rounded corners, spanning a fixed height at top
-        hn_h = min(10, section_r * 0.18)
-        hn_y = ry_top
-
         if is_odd:
             svg += (
-                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(hn_y)}" '
+                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(ry_top)}" '
                 f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
-                f'fill="white" stroke="none" opacity="0.85"/>'
+                f'fill="white" stroke="none" opacity="1"/>'
             )
-            text_cy = hn_y + hn_h / 2
+            text_cy = ry_top + hn_h / 2
             fs = min(5, max(min_font, hn_h * 0.6))
             svg += (
                 f'<text x="{_ff(hole_cx)}" y="{_ff(text_cy)}" '
@@ -901,11 +920,11 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
             )
         else:
             svg += (
-                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(hn_y)}" '
+                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(ry_top)}" '
                 f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
-                f'fill="none" stroke="white" stroke-width="0.5" opacity="0.85"/>'
+                f'fill="none" stroke="white" stroke-width="0.5" opacity="1"/>'
             )
-            text_cy = hn_y + hn_h / 2
+            text_cy = ry_top + hn_h / 2
             fs = min(5, max(min_font, hn_h * 0.6))
             svg += (
                 f'<text x="{_ff(hole_cx)}" y="{_ff(text_cy)}" '
@@ -917,60 +936,101 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
 
         svg += '</g>'
 
-        # --- Score rects below hole number ---
-        # Start scores after the hole number rect
-        score_start_r = r_top - hn_h - 2  # small gap after hole number
-        score_end_r = r_bot
+        # Score rects: divide FULL section space proportionally.
+        # Pre-compute exact y positions so adjacent rects share edges.
+        score_r_top = section_r_top
+        score_r_bot = section_r_bot
+        score_total = abs(score_r_top - score_r_bot)
 
+        if score_total < 2 or not zones:
+            continue
+
+        orig_total = sum(abs(_y_to_r(z["y_top"]) - _y_to_r(z["y_bottom"])) for z in zones)
+        if orig_total <= 0:
+            orig_total = 1
+
+        # Pre-compute all zone edge positions (shared edges)
+        zone_edges = [score_r_top]
         for zone in zones:
-            label = zone["label"]
+            orig_h = abs(_y_to_r(zone["y_top"]) - _y_to_r(zone["y_bottom"]))
+            frac = orig_h / orig_total
+            zone_edges.append(zone_edges[-1] - score_total * frac)
+        zone_edges[-1] = score_r_bot
+
+        sx = score_cx - score_col_w / 2
+        sw = score_col_w
+
+        svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
+
+        # Step 1: Draw ONE white background rect for the entire score column
+        svg += (
+            f'<rect x="{_ff(sx)}" y="{_ff(-score_r_top)}" '
+            f'width="{_ff(sw)}" height="{_ff(score_total)}" '
+            f'fill="white" stroke="none"/>'
+        )
+
+        # Step 2: Draw dark rects for "even" zones (0, -1, +2, +4)
+        # These punch through the white background to show dark
+        for zi, zone in enumerate(zones):
             score = zone.get("score", 0)
-            r_zt = _y_to_r(zone["y_top"])
-            r_zb = _y_to_r(zone["y_bottom"])
-
-            # Clamp to score area (below hole number)
-            r_zt = min(r_zt, score_start_r)
-            r_zb = max(r_zb, score_end_r)
-
-            zone_r = abs(r_zt - r_zb)
-
-            if zone_r < 2:
-                continue
-
-            fs = min(3.5, max(min_font, zone_r * 0.55))
-            if zone_r < min_font:
-                continue
-
-            r_mid = (r_zt + r_zb) / 2
-            ry = -r_zt  # SVG y for top of zone
-
-            svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
-
             is_odd_score = score in (1, 3, 5)
             if is_odd_score:
-                svg += (
-                    f'<rect x="{_ff(score_cx - score_col_w / 2)}" y="{_ff(ry)}" '
-                    f'width="{_ff(score_col_w)}" height="{_ff(zone_r)}" '
-                    f'fill="white" stroke="none" opacity="0.75"/>'
-                )
-                svg += (
-                    f'<text x="{_ff(score_cx)}" y="{_ff(-r_mid + fs * 0.35)}" '
-                    f'text-anchor="middle" fill="#1a1a1a" font-size="{_ff(fs)}" font-weight="700" '
-                    f'font-family="{font_family}">{_esc_xml(label)}</text>'
-                )
-            else:
-                svg += (
-                    f'<rect x="{_ff(score_cx - score_col_w / 2)}" y="{_ff(ry)}" '
-                    f'width="{_ff(score_col_w)}" height="{_ff(zone_r)}" '
-                    f'fill="none" stroke="white" stroke-width="0.3" opacity="0.65"/>'
-                )
-                svg += (
-                    f'<text x="{_ff(score_cx)}" y="{_ff(-r_mid + fs * 0.35)}" '
-                    f'text-anchor="middle" fill="white" font-size="{_ff(fs)}" '
-                    f'font-family="{font_family}" opacity="0.65">{_esc_xml(label)}</text>'
-                )
+                continue  # stays white
 
-            svg += '</g>'
+            r_t = zone_edges[zi]
+            r_b = zone_edges[zi + 1]
+            zone_r = abs(r_t - r_b)
+            if zone_r < 0.2:
+                continue
+
+            svg += (
+                f'<rect x="{_ff(sx)}" y="{_ff(-r_t)}" '
+                f'width="{_ff(sw)}" height="{_ff(zone_r)}" '
+                f'fill="#1a1a1a" stroke="none"/>'
+            )
+
+        # Step 3: Draw thin white outline around the entire column
+        svg += (
+            f'<rect x="{_ff(sx)}" y="{_ff(-score_r_top)}" '
+            f'width="{_ff(sw)}" height="{_ff(score_total)}" '
+            f'fill="none" stroke="white" stroke-width="0.3"/>'
+        )
+
+        # Step 4: Draw horizontal divider lines at each zone edge
+        for zi in range(1, len(zone_edges) - 1):
+            ey = -zone_edges[zi]
+            svg += (
+                f'<line x1="{_ff(sx)}" y1="{_ff(ey)}" '
+                f'x2="{_ff(sx + sw)}" y2="{_ff(ey)}" '
+                f'stroke="white" stroke-width="0.2"/>'
+            )
+
+        # Step 5: Score labels
+        for zi, zone in enumerate(zones):
+            label = zone["label"]
+            score = zone.get("score", 0)
+            is_odd_score = score in (1, 3, 5)
+
+            r_t = zone_edges[zi]
+            r_b = zone_edges[zi + 1]
+            zone_r = abs(r_t - r_b)
+            if zone_r < 0.2:
+                continue
+
+            r_mid_y = -(r_t + r_b) / 2
+            fs = min(3.5, max(1.2, zone_r * 0.6))
+            # Never let text exceed zone height
+            if fs > zone_r * 0.85:
+                fs = zone_r * 0.85
+
+            text_fill = "#1a1a1a" if is_odd_score else "white"
+            svg += (
+                f'<text x="{_ff(score_cx)}" y="{_ff(r_mid_y + fs * 0.35)}" '
+                f'text-anchor="middle" fill="{text_fill}" font-size="{_ff(fs)}" font-weight="700" '
+                f'font-family="{font_family}">{_esc_xml(label)}</text>'
+            )
+
+        svg += '</g>'
 
     svg += "</g>"
     return svg
@@ -996,14 +1056,14 @@ def _render_logo_bottom_left(layout: dict, opts: dict) -> str:
             f'<image href="{_esc_xml(logo_url)}" '
             f'x="{_ff(cx - img_size / 2)}" y="{_ff(cy - img_size / 2)}" '
             f'width="{_ff(img_size)}" height="{_ff(img_size)}" '
-            f'opacity="0.6" preserveAspectRatio="xMidYMid meet"/>'
+            f'opacity="1" preserveAspectRatio="xMidYMid meet"/>'
         )
     else:
         ch = layout.get("canvas_height", 700)
         return (
             f'<image href="{_esc_xml(logo_url)}" '
             f'x="5" y="{_ff(ch - 25)}" width="20" height="20" '
-            f'opacity="0.6" preserveAspectRatio="xMidYMid meet"/>'
+            f'opacity="1" preserveAspectRatio="xMidYMid meet"/>'
         )
 
 
@@ -1220,7 +1280,7 @@ def _render_warped_text(layout: dict, opts: dict, font_family: str) -> str:
     elif opts.get("course_name"):
         svg += (
             f'<text fill="white" font-size="7" font-weight="700" '
-            f'font-family="{font_family}" opacity="0.85" text-anchor="middle">'
+            f'font-family="{font_family}" opacity="1" text-anchor="middle">'
             f'<textPath href="#textArc1" startOffset="50%">'
             f'{_esc_xml(opts["course_name"])}</textPath></text>'
         )
@@ -1228,7 +1288,7 @@ def _render_warped_text(layout: dict, opts: dict, font_family: str) -> str:
     if opts.get("hole_range"):
         svg += (
             f'<text fill="white" font-size="4" font-family="{font_family}" '
-            f'opacity="0.6" text-anchor="middle">'
+            f'opacity="1" text-anchor="middle">'
             f'<textPath href="#textArc2" startOffset="50%">'
             f'{_esc_xml(opts["hole_range"])}</textPath></text>'
         )
@@ -1236,7 +1296,7 @@ def _render_warped_text(layout: dict, opts: dict, font_family: str) -> str:
     if opts.get("hole_yardages"):
         svg += (
             f'<text fill="white" font-size="3" font-family="{font_family}" '
-            f'opacity="0.5" text-anchor="middle">'
+            f'opacity="1" text-anchor="middle">'
             f'<textPath href="#textArc3" startOffset="50%">'
             f'{_esc_xml("  ".join(str(y) for y in opts["hole_yardages"]))}</textPath></text>'
         )
@@ -1261,7 +1321,7 @@ def _render_rect_text(layout: dict, opts: dict, font_family: str) -> str:
         svg += (
             f'<text transform="translate(10, {_ff(y_mid)}) rotate(-90)" '
             f'text-anchor="middle" fill="white" font-size="12" font-weight="700" '
-            f'font-family="{font_family}" opacity="0.85">'
+            f'font-family="{font_family}" opacity="1">'
             f'{_esc_xml(opts["course_name"])}</text>'
         )
 
@@ -1269,7 +1329,7 @@ def _render_rect_text(layout: dict, opts: dict, font_family: str) -> str:
         svg += (
             f'<text transform="translate(22, {_ff(y_mid)}) rotate(-90)" '
             f'text-anchor="middle" fill="white" font-size="7" '
-            f'font-family="{font_family}" opacity="0.6">'
+            f'font-family="{font_family}" opacity="1">'
             f'{_esc_xml(opts["hole_range"])}</text>'
         )
 
@@ -1277,7 +1337,7 @@ def _render_rect_text(layout: dict, opts: dict, font_family: str) -> str:
         svg += (
             f'<text transform="translate(31, {_ff(y_mid)}) rotate(-90)" '
             f'text-anchor="middle" fill="white" font-size="5" '
-            f'font-family="{font_family}" opacity="0.45">'
+            f'font-family="{font_family}" opacity="1">'
             f'{_esc_xml("  ".join(str(y) for y in opts["hole_yardages"]))}</text>'
         )
 
@@ -1311,7 +1371,7 @@ def _render_embedded_qr(layout: dict, opts: dict) -> str:
     # Embed QR as a nested SVG group
     return (
         f'<g transform="translate({_ff(cx - qr_size / 2)}, {_ff(cy - qr_size / 2)}) '
-        f'scale({_ff(qr_size / 100)})" opacity="0.6">'
+        f'scale({_ff(qr_size / 100)})" opacity="1">'
         f'<!-- QR code embedded -->'
         f'</g>'
     )

@@ -155,11 +155,14 @@ def warp_layout(layout: dict, template: dict, padding_opts: dict | None = None) 
                 min_y = min(min_y, y)
                 max_y = max(max_y, y)
 
-    pad = 20
-    min_x -= pad
-    min_y -= pad
-    max_x += pad
-    max_y += pad
+    # Add space for stats boxes (configurable)
+    stats_box_w = 18  # width of stats box that sits beside hole numbers
+    # Stats boxes extend outward from the tee side of each hole
+    # Add this width to the content bounds on both sides
+    min_x -= stats_box_w + 10
+    max_x += stats_box_w + 10
+    min_y -= 15
+    max_y += 15
     content_w = max_x - min_x
     content_h = max_y - min_y
 
