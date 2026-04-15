@@ -7,14 +7,6 @@ def search_cache():
     return get_collection("search_cache")
 
 
-def map_cache():
-    return get_collection("map_cache")
-
-
-def bundle_cache():
-    return get_collection("bundle_cache")
-
-
 def courses():
     return get_collection("courses")
 

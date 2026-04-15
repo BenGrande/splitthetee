@@ -223,6 +223,12 @@ body { margin: 0; font-family: Arial, sans-serif; background: #fff; }
     const holeRange = computeHoleRange(courseData.holes)
 
     try {
+      // Pass lat/lng from courseData.center as fallback
+      const opts = buildRenderOptions()
+      if (!opts.course_lat && courseData.center) {
+        opts.course_lat = courseData.center[0]
+        opts.course_lng = courseData.center[1]
+      }
       const res = await fetch('/api/v1/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,7 +236,7 @@ body { margin: 0; font-family: Arial, sans-serif; background: #fff; }
           holes: courseData.holes,
           course_name: courseData.courseName || '',
           hole_range: holeRange,
-          options: buildRenderOptions(),
+          options: opts,
         }),
       })
 
@@ -336,7 +342,7 @@ body { margin: 0; font-family: Arial, sans-serif; background: #fff; }
   const cricutLoading = ref(false)
 
   function buildRenderOptions() {
-    // Extract course lat/lng from URL query params (set when course is selected)
+    // Extract course lat/lng from URL query params or route
     const urlParams = new URLSearchParams(window.location.search)
     const courseLat = urlParams.get('lat') ? parseFloat(urlParams.get('lat')!) : undefined
     const courseLng = urlParams.get('lng') ? parseFloat(urlParams.get('lng')!) : undefined

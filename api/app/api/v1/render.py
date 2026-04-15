@@ -52,6 +52,10 @@ async def _render_course_map_svg(
     from app.services.render.course_map import render_course_map_svg
 
     hole_stats = _build_hole_stats(holes)
+    logger.info("Course map: hole_stats keys=%s, sample=%s, lat=%s lng=%s",
+                list(hole_stats.keys())[:5],
+                next(iter(hole_stats.values()), None) if hole_stats else None,
+                course_lat, course_lng)
 
     # If we have lat/lng, fetch the real OSM features for the overhead map
     if course_lat and course_lng:
@@ -60,6 +64,15 @@ async def _render_course_map_svg(
             map_data = await fetch_course_map(course_lat, course_lng)
             features = map_data.get("features", [])
             center = map_data.get("center", [course_lat, course_lng])
+            # Count features by category for debugging
+            cats = {}
+            for f in features:
+                c = f.get("category", "?")
+                cats[c] = cats.get(c, 0) + 1
+                if c == "hole":
+                    logger.info("  hole feature ref=%s coords=%d", f.get("ref"), len(f.get("coords", [])))
+            logger.info("Course map: lat=%.4f lng=%.4f features=%d categories=%s",
+                        course_lat, course_lng, len(features), cats)
             if features:
                 return render_course_map_svg(
                     features, center, width=600, height=300, hole_stats=hole_stats,
@@ -68,10 +81,21 @@ async def _render_course_map_svg(
             logger.warning("Real course map fetch failed: %s", exc)
 
     # Fallback: build map from hole features themselves (they have coords)
+    # Also inject hole routing lines as "hole" category features so labels work
     all_features = []
     for h in holes:
         for f in h.get("features", []):
             all_features.append(f)
+        # Add hole routing line as a "hole" feature with ref
+        route = h.get("route_coords")
+        if route and h.get("ref"):
+            all_features.append({
+                "category": "hole",
+                "ref": str(h["ref"]),
+                "coords": route,
+            })
+
+    logger.info("Course map fallback: %d features from %d holes", len(all_features), len(holes))
 
     if all_features:
         all_lats, all_lngs = [], []

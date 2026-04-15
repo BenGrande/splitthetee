@@ -27,25 +27,13 @@ async def _ensure_indexes() -> None:
         expireAfterSeconds=settings.SEARCH_CACHE_TTL,
     )
 
-    # Map cache — TTL index
-    map_cache = _db["map_cache"]
-    await map_cache.create_index([("cache_key", ASCENDING)], unique=True)
-    await map_cache.create_index(
-        [("cached_at", ASCENDING)],
-        expireAfterSeconds=settings.MAP_CACHE_TTL,
-    )
-
-    # Bundle cache — TTL index
-    bundle_cache = _db["bundle_cache"]
-    await bundle_cache.create_index([("cache_key", ASCENDING)], unique=True)
-    await bundle_cache.create_index(
-        [("cached_at", ASCENDING)],
-        expireAfterSeconds=settings.MAP_CACHE_TTL,
-    )
-
-    # Courses — for search and lookup
+    # Courses — keyed by course_id, with TTL
     courses = _db["courses"]
-    await courses.create_index([("course_id", ASCENDING)], unique=True, sparse=True)
+    await courses.create_index([("course_id", ASCENDING)], unique=True)
+    await courses.create_index(
+        [("cached_at", ASCENDING)],
+        expireAfterSeconds=settings.MAP_CACHE_TTL,
+    )
 
     # Glass sets
     glass_sets = _db["glass_sets"]

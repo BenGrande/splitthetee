@@ -3,12 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 
 import httpx
 
 from app.core.config import settings
-from app.db.mongo import map_cache
 
 logger = logging.getLogger(__name__)
 
