@@ -67,13 +67,13 @@ function clearLogo() {
             class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-emerald-600" />
         </div>
         <div>
-          <label class="block text-xs text-gray-500 mb-0.5">Top R (mm)</label>
-          <input v-model.number="store.glassDimensions.topRadius" type="number" min="10" max="100" step="0.1"
+          <label class="block text-xs text-gray-500 mb-0.5">Top ⌀ (mm)</label>
+          <input v-model.number="store.glassDimensions.topDiameter" type="number" min="20" max="200" step="0.1"
             class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-emerald-600" />
         </div>
         <div>
-          <label class="block text-xs text-gray-500 mb-0.5">Bottom R (mm)</label>
-          <input v-model.number="store.glassDimensions.bottomRadius" type="number" min="10" max="100" step="0.1"
+          <label class="block text-xs text-gray-500 mb-0.5">Bottom ⌀ (mm)</label>
+          <input v-model.number="store.glassDimensions.bottomDiameter" type="number" min="20" max="200" step="0.1"
             class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-emerald-600" />
         </div>
         <div>

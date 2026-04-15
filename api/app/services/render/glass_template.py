@@ -7,11 +7,11 @@ import math
 def compute_glass_template(opts: dict | None = None) -> dict:
     """Compute the unwrapped glass template geometry."""
     opts = opts or {}
-    glass_height = opts.get("glass_height", 134.8)
-    top_radius = opts.get("top_radius", 44.2)
-    bottom_radius = opts.get("bottom_radius", 31.6)
+    glass_height = opts.get("glass_height", 150)
+    top_radius = opts.get("top_radius", 44)
+    bottom_radius = opts.get("bottom_radius", 30)
     wall_thickness = opts.get("wall_thickness", 3.1)
-    base_thickness = opts.get("base_thickness", 11.5)
+    base_thickness = opts.get("base_thickness", 16.5)
 
     top_circumference = 2 * math.pi * top_radius
     bottom_circumference = 2 * math.pi * bottom_radius
@@ -70,7 +70,7 @@ def compute_fill_height(template: dict, volume_ml: float) -> dict:
 
     inner_top_r = template["top_radius"] - template.get("wall_thickness", 3.1)
     inner_bot_r = template["bottom_radius"] - template.get("wall_thickness", 3.1)
-    inner_h = glass_height - template.get("base_thickness", 11.5)
+    inner_h = glass_height - template.get("base_thickness", 16.5)
     target_mm3 = volume_ml * 1000
 
     lo, hi = 0.0, inner_h
@@ -84,7 +84,7 @@ def compute_fill_height(template: dict, volume_ml: float) -> dict:
             hi = mid
 
     fill_h = (lo + hi) / 2
-    outer_fill_h = template.get("base_thickness", 11.5) + fill_h
+    outer_fill_h = template.get("base_thickness", 16.5) + fill_h
     return {"height_mm": outer_fill_h, "fraction": outer_fill_h / glass_height}
 
 
@@ -194,8 +194,13 @@ def warp_layout(layout: dict, template: dict, padding_opts: dict | None = None) 
     half_angle = sector_angle / 2
 
     edge_inset = 0.05
-    r_top = outer_r - (outer_r - inner_r) * (edge_inset + top_pad)
-    r_bot = inner_r + (outer_r - inner_r) * (edge_inset + bot_pad)
+    radial_span = outer_r - inner_r  # = slant height
+    # Reserve the base thickness + 7mm extra at the bottom so content
+    # stays above the solid glass base with room for leftover beer.
+    base_mm = template.get("base_thickness", 16.5)
+    base_reserve = (base_mm + 7) / radial_span if radial_span > 0 else 0
+    r_top = outer_r - radial_span * (edge_inset + top_pad)
+    r_bot = inner_r + radial_span * (max(edge_inset, base_reserve) + bot_pad)
 
     def warp_pt(x, y):
         nx = text_reserve + ((x - min_x) / content_w) * (1 - text_reserve - 0.17)

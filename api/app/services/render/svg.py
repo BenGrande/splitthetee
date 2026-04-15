@@ -539,10 +539,12 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
     _blue = layer in ("all", "blue") or (layer == "white" and _consolidate)
     _tan = layer in ("all", "tan") or (layer == "white" and _consolidate)
 
+    print_mode = opts.get("print_mode", False)
+
     if is_warped:
         t = layout["template"]
         half_a = t["sector_angle"] / 2
-        pad = 8
+        pad = 0 if print_mode else 8
         vb_x = -t["outer_r"] * math.sin(half_a) - pad
         vb_y = -t["outer_r"] - pad
         vb_w = 2 * t["outer_r"] * math.sin(half_a) + pad * 2
@@ -552,11 +554,18 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
         vb_w = layout.get("canvas_width", 900)
         vb_h = layout.get("canvas_height", 700)
 
-    svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-        f'viewBox="{_ff(vb_x)} {_ff(vb_y)} {_ff(vb_w)} {_ff(vb_h)}" '
-        f'width="{round(vb_w)}" height="{round(vb_h)}">'
-    )
+    if print_mode and is_warped:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            f'viewBox="{_ff(vb_x)} {_ff(vb_y)} {_ff(vb_w)} {_ff(vb_h)}" '
+            f'width="{vb_w:.2f}mm" height="{vb_h:.2f}mm">'
+        )
+    else:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            f'viewBox="{_ff(vb_x)} {_ff(vb_y)} {_ff(vb_w)} {_ff(vb_h)}" '
+            f'width="{round(vb_w)}" height="{round(vb_h)}">'
+        )
 
     # Defs: clip path (no gradient — solid dark background represents glass)
     svg += "<defs>"
@@ -1161,10 +1170,12 @@ def render_svg(layout: dict, opts: dict | None = None) -> str:
     zones_by_hole = opts.get("zones_by_hole", [])
     scoring_preview = opts.get("scoring_preview", False)
 
+    print_mode = opts.get("print_mode", False)
+
     if is_warped:
         t = layout["template"]
         half_a = t["sector_angle"] / 2
-        pad = 8
+        pad = 0 if print_mode else 8
         vb_x = -t["outer_r"] * math.sin(half_a) - pad
         vb_y = -t["outer_r"] - pad
         vb_w = 2 * t["outer_r"] * math.sin(half_a) + pad * 2
@@ -1174,11 +1185,18 @@ def render_svg(layout: dict, opts: dict | None = None) -> str:
         vb_w = layout.get("canvas_width", 900)
         vb_h = layout.get("canvas_height", 700)
 
-    svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-        f'viewBox="{_ff(vb_x)} {_ff(vb_y)} {_ff(vb_w)} {_ff(vb_h)}" '
-        f'width="{round(vb_w)}" height="{round(vb_h)}">'
-    )
+    if print_mode and is_warped:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            f'viewBox="{_ff(vb_x)} {_ff(vb_y)} {_ff(vb_w)} {_ff(vb_h)}" '
+            f'width="{vb_w:.2f}mm" height="{vb_h:.2f}mm">'
+        )
+    else:
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            f'viewBox="{_ff(vb_x)} {_ff(vb_y)} {_ff(vb_w)} {_ff(vb_h)}" '
+            f'width="{round(vb_w)}" height="{round(vb_h)}">'
+        )
 
     svg += "<defs>"
     if is_warped:

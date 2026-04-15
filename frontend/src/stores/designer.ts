@@ -58,11 +58,16 @@ export const useDesignerStore = defineStore('designer', () => {
   const currentGlass = ref(0)
 
   const glassDimensions = reactive({
-    height: 134.8,
-    topRadius: 44.2,
-    bottomRadius: 31.6,
+    height: 150,
+    topRadius: 44,
+    bottomRadius: 30,
     wallThickness: 3.1,
-    baseThickness: 11.5,
+    baseThickness: 16.5,
+    // Diameter helpers for UI — stored as radius internally, displayed as diameter
+    get topDiameter() { return this.topRadius * 2 },
+    set topDiameter(v: number) { this.topRadius = v / 2 },
+    get bottomDiameter() { return this.bottomRadius * 2 },
+    set bottomDiameter(v: number) { this.bottomRadius = v / 2 },
   })
 
   const fillMode = ref<'full' | 'can' | 'custom'>('can')
@@ -125,28 +130,28 @@ export const useDesignerStore = defineStore('designer', () => {
     const slantH = Math.sqrt(d.height * d.height + radiusDiff * radiusDiff)
     const topCirc = 2 * Math.PI * d.topRadius
 
-    // The SVG viewBox units ARE mm (1 unit = 1 mm).
-    // Extract viewBox to get the actual print dimensions.
-    const vbMatch = svgContent.value.match(/viewBox="([^"]+)"/)
-    let vbW = 283, vbH = 176
-    if (vbMatch) {
-      const parts = vbMatch[1].split(/\s+/).map(Number)
-      vbW = parts[2]
-      vbH = parts[3]
-    }
+    // Compute exact sector bounding box from glass dimensions (zero padding).
+    // The on-screen SVG has 8mm padding; we strip it for print so the sector
+    // fits within the printable area at exact 1:1 scale.
+    const D = (d.bottomRadius * slantH) / radiusDiff
+    const innerR = D
+    const outerR = D + slantH
+    const sectorAngle = (2 * Math.PI * d.bottomRadius) / innerR
+    const halfAngle = sectorAngle / 2
 
-    // Print at actual size (1:1) — no scaling down to fit
-    const marginMm = 0
-    const scale = 1
-    const printW = vbW
-    const scalePercent = '100'
+    const exactW = 2 * outerR * Math.sin(halfAngle)
+    const exactH = outerR - innerR * Math.cos(halfAngle)
+    const exactX = -outerR * Math.sin(halfAngle)
+    const exactY = -outerR
 
-    // Invert SVG colors for print: white bg, black elements.
-    // Use placeholders to avoid double-replacement.
-    // Fix SVG width/height to use mm units so browser scales correctly
+    // Replace viewBox and width/height with zero-padding values in mm
     let printSvg = svgContent.value
-      .replace(/width="\d+"/, `width="${printW.toFixed(1)}mm"`)
-      .replace(/height="\d+"/, `height="${(vbH * scale).toFixed(1)}mm"`)
+      .replace(
+        /viewBox="[^"]+"/,
+        `viewBox="${exactX.toFixed(2)} ${exactY.toFixed(2)} ${exactW.toFixed(2)} ${exactH.toFixed(2)}"`
+      )
+      .replace(/width="[^"]+"/, `width="${exactW.toFixed(2)}mm"`)
+      .replace(/height="[^"]+"/, `height="${exactH.toFixed(2)}mm"`)
 
     // Strip out all <mask> elements before color inversion, then add them back.
     // Masks use fill="white"/fill="black" for visibility which must not be inverted.
@@ -183,21 +188,21 @@ export const useDesignerStore = defineStore('designer', () => {
 <style>
 @page { size: landscape; margin: 0; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Arial, sans-serif; background: #fff; }
-.info { font-size: 8pt; color: #666; margin: 0 0 2mm 0; }
-.info strong { color: #333; }
-.wrap-outer { width: ${printW.toFixed(1)}mm; overflow: visible; margin: 0 auto; }
-.wrap-outer svg { width: ${printW.toFixed(1)}mm; display: block; }
+body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; }
+.wrap-outer { overflow: visible; margin: 0 auto; text-align: center; }
+.wrap-outer svg { display: block; margin: 0 auto; max-width: none; }
 .scale-ruler { margin: 2mm auto 0; width: 100mm; height: 4mm; border: 0.3mm solid #000; text-align: center; font-size: 7pt; line-height: 4mm; color: #333; }
+.no-print-info { font-size: 8pt; color: #666; margin: 2mm; }
+.no-print-info strong { color: #333; }
 @media print { .no-print { display: none !important; } }
 </style></head><body>
-<div class="info"><strong>${courseName.value || 'Course'}</strong> — Glass ${currentGlass.value + 1} | <strong>100% scale (actual size)</strong> | Wrap: ${topCirc.toFixed(0)}mm × ${slantH.toFixed(0)}mm | Glass: H=${d.height}mm, Top⌀=${(d.topRadius * 2).toFixed(0)}mm, Bot⌀=${(d.bottomRadius * 2).toFixed(0)}mm</div>
-<div class="info" style="color:#c00;font-weight:bold;">⚠ In print dialog: set Margins to "None" and Scale to "Default" (100%). The wrap is ${vbW.toFixed(0)}mm wide — it may clip on letter paper.</div>
+<div class="no-print no-print-info"><strong>${courseName.value || 'Course'}</strong> — Glass ${currentGlass.value + 1} | <strong>100% scale (actual size)</strong> | Wrap: ${topCirc.toFixed(0)}mm &times; ${slantH.toFixed(0)}mm | Glass: H=${d.height}mm, Top&empty;=${(d.topRadius * 2).toFixed(0)}mm, Bot&empty;=${(d.bottomRadius * 2).toFixed(0)}mm</div>
+<div class="no-print no-print-info" style="color:#c00;font-weight:bold;">In print dialog: set Margins to "None" and Scale to "Default" (100%). If the ruler below does not measure 100mm, set a custom scale of (100 / ruler_mm * 100)%. For example, if ruler = 97mm, set scale to 103%.</div>
 <div class="wrap-outer">${printSvg}</div>
 <div class="scale-ruler">100mm ruler — verify print scale</div>
-<div style="text-align:center;margin-top:2mm;">
+<div class="no-print" style="text-align:center;margin-top:2mm;">
 <span style="font-size:7pt;color:#888;">Cut along glass outline. Top edge = lip of glass.</span><br>
-<button class="no-print" onclick="window.print()" style="margin-top:3mm;padding:8px 24px;font-size:11pt;cursor:pointer;">Print</button>
+<button onclick="window.print()" style="margin-top:3mm;padding:8px 24px;font-size:11pt;cursor:pointer;">Print</button>
 </div></body></html>`)
     printWindow.document.close()
     statusMessage.value = 'Print test page opened — 1:1 scale, landscape'
