@@ -187,7 +187,12 @@ def warp_layout(layout: dict, template: dict, padding_opts: dict | None = None) 
     content_w = max_x - min_x
     content_h = max_y - min_y
 
-    text_reserve = 0.14
+    # Two-column layouts need more left-side angular space to fit BOTH the
+    # course title text AND the left score ruler without the columns
+    # overflowing into that area.
+    is_two_column = layout.get("layout_mode") == "two_column"
+    text_reserve = 0.22 if is_two_column else 0.14
+    right_reserve = 0.17
     inner_r = template["inner_r"]
     outer_r = template["outer_r"]
     sector_angle = template["sector_angle"]
@@ -203,7 +208,7 @@ def warp_layout(layout: dict, template: dict, padding_opts: dict | None = None) 
     r_bot = inner_r + radial_span * (max(edge_inset, base_reserve) + bot_pad)
 
     def warp_pt(x, y):
-        nx = text_reserve + ((x - min_x) / content_w) * (1 - text_reserve - 0.17)
+        nx = text_reserve + ((x - min_x) / content_w) * (1 - text_reserve - right_reserve)
         ny = (y - min_y) / content_h
         r = r_top - ny * (r_top - r_bot)
         angle = -half_angle + nx * sector_angle

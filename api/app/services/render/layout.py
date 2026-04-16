@@ -53,6 +53,15 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
             "yardage": yardage,
         })
 
+    if opts.get("layout") == "two_column" and len(hole_layouts) >= 6:
+        return _compute_two_pass_layout(
+            holes, hole_layouts, opts,
+            draw_left, draw_right, draw_top, draw_bottom,
+            draw_width, draw_height,
+            canvas_width, canvas_height,
+            max_hole_width, hole_padding,
+        )
+
     # Simulate zigzag
     raw_positions = _simulate_zigzag(hole_layouts, hole_padding)
 
@@ -119,7 +128,148 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
     }
 
 
-def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float) -> list[dict]:
+def _find_pass_split(hole_layouts: list[dict]) -> int:
+    """Find the split index for two-column layout. Prefers 5 (holes 1-5 | 6-9)."""
+    n = len(hole_layouts)
+    candidates = [i for i in (4, 5) if 2 <= i <= n - 2]
+    if not candidates:
+        return n // 2
+    # Prefer 5 when available so the left column has holes 1-5 and right has 6-9
+    return 5 if 5 in candidates else candidates[0]
+
+
+def _position_raw(raw_positions, hole_layouts_subset, draw_left, draw_top,
+                  draw_width, draw_height, max_hole_width):
+    """Scale raw zigzag positions to canvas coordinates and transform features."""
+    if not raw_positions:
+        return []
+
+    total_vertical = raw_positions[-1]["end_y"]
+    scale_factor = draw_height / total_vertical if total_vertical > 0 else 1
+
+    raw_min_x = min(min(rp["start_x"], rp["end_x"]) for rp in raw_positions)
+    raw_max_x = max(max(rp["start_x"], rp["end_x"]) for rp in raw_positions)
+    raw_span = raw_max_x - raw_min_x or 0.5
+
+    def map_x(nx):
+        return draw_left + (nx - raw_min_x + (1 - raw_span) / 2) * draw_width
+
+    positioned = []
+    for rp in raw_positions:
+        start_x = map_x(rp["start_x"])
+        start_y = draw_top + rp["start_y"] * scale_factor
+        end_x = map_x(rp["end_x"])
+        end_y = draw_top + rp["end_y"] * scale_factor
+        length = rp["raw_length"] * scale_factor
+        mw = length * max_hole_width
+
+        features = _transform_hole_features(
+            rp["hole"], start_x, start_y, end_x, end_y, mw
+        )
+
+        positioned.append({
+            "ref": rp["hole"].get("ref"),
+            "par": rp["hole"].get("par"),
+            "yardage": rp["yardage"],
+            "handicap": rp["hole"].get("handicap"),
+            "difficulty": rp["hole"].get("difficulty"),
+            "start_x": start_x,
+            "start_y": start_y,
+            "end_x": end_x,
+            "end_y": end_y,
+            "angle_deg": rp["angle_deg"],
+            "direction": rp["direction"],
+            "length": length,
+            "features": features,
+        })
+
+    return positioned
+
+
+def _compute_two_pass_layout(holes, hole_layouts, opts,
+                             draw_left, draw_right, draw_top, draw_bottom,
+                             draw_width, draw_height,
+                             canvas_width, canvas_height,
+                             max_hole_width, hole_padding):
+    """Compute a side-by-side two-column layout — both columns span full height.
+
+    Column 1 (first N holes): LEFT column, full canvas height.
+    Column 2 (remaining holes): RIGHT column, full canvas height.
+    Left ruler sits between the title and column 1; right ruler on the far right.
+    """
+    split_idx = _find_pass_split(hole_layouts)
+    col1_layouts = hole_layouts[:split_idx]
+    col2_layouts = hole_layouts[split_idx:]
+
+    # Re-normalize length_fraction within each column
+    for group in (col1_layouts, col2_layouts):
+        total = sum(h["length_fraction"] for h in group)
+        if total > 0:
+            for h in group:
+                h["length_fraction"] /= total
+
+    # Reserve space for the left ruler (between title and column 1).
+    # Needs to be wide enough that the ruler + a safety gap fit, and that
+    # rescaled hole features don't extend past the column boundary into
+    # the ruler.
+    left_ruler_margin = 50
+    left_draw_left = draw_left + left_ruler_margin
+    effective_width = draw_right - left_draw_left
+
+    # Tight gap between columns so each column gets as much width as possible
+    col_gap = effective_width * 0.03
+    left_col_width = (effective_width - col_gap) / 2
+    right_col_left = left_draw_left + left_col_width + col_gap
+    right_col_width = effective_width - left_col_width - col_gap
+
+    # Slightly wider holes than default for two-column mode (still below the
+    # threshold that causes fairways to overflow into ruler territory)
+    two_col_hole_width = max(max_hole_width, 0.5)
+
+    # Standard zigzag for each column — both span full canvas height
+    raw1 = _simulate_zigzag(col1_layouts, hole_padding,
+                            start_x=0.06, start_direction=1)
+    raw2 = _simulate_zigzag(col2_layouts, hole_padding,
+                            start_x=0.06, start_direction=1)
+
+    pos1 = _position_raw(raw1, col1_layouts, left_draw_left, draw_top,
+                         left_col_width, draw_height, two_col_hole_width)
+    pos2 = _position_raw(raw2, col2_layouts, right_col_left, draw_top,
+                         right_col_width, draw_height, two_col_hole_width)
+
+    # Post-process each column independently — both span full draw_height
+    for group, dl, dw in [(pos1, left_draw_left, left_col_width),
+                          (pos2, right_col_left, right_col_width)]:
+        _fix_overlaps(group)
+        _enforce_green_tee_gap(group)
+        _rescale_to_fill(group, dl, draw_top, dw, draw_height)
+        _pack_holes(group)
+        _enforce_slope(group)
+        _rescale_to_fill(group, dl, draw_top, dw, draw_height)
+
+    positioned = pos1 + pos2
+
+    return {
+        "holes": positioned,
+        "canvas_width": canvas_width,
+        "canvas_height": canvas_height,
+        "layout_mode": "two_column",
+        "column_split": split_idx,
+        "draw_area": {
+            "left": left_draw_left,
+            "right": draw_right,
+            "top": draw_top,
+            "bottom": draw_bottom,
+            "left_ruler_right": left_draw_left,
+        },
+    }
+
+
+def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float,
+                     x_min: float = 0.06, x_max: float = 0.94,
+                     start_x: float | None = None,
+                     start_direction: int = 1,
+                     target_sweep: float | None = None) -> list[dict]:
     """Simulate zigzag in normalized space with gaps between holes."""
     n = len(hole_layouts)
     raw_lengths = [h["length_fraction"] for h in hole_layouts]
@@ -128,11 +278,12 @@ def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float) -> list[dict
     avg_length = sum(raw_lengths) / n
     gap = avg_length * gap_fraction
 
-    cur_x = 0.06
+    cur_x = start_x if start_x is not None else (x_min + 0.01)
     cur_y = 0.0
-    direction = 1
+    direction = start_direction
     sweep_accum = 0.0
-    target_sweep = 0.7 if n <= 3 else (0.6 if n <= 6 else 0.5)
+    if target_sweep is None:
+        target_sweep = 0.7 if n <= 3 else (0.6 if n <= 6 else 0.5)
     result = []
 
     for i in range(n):
@@ -142,7 +293,7 @@ def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float) -> list[dict
         next_x = cur_x + dx * direction
         sweep_accum += dx
 
-        if next_x > 0.94 or next_x < 0.06 or (sweep_accum > target_sweep and i < n - 1):
+        if next_x > x_max or next_x < x_min or (sweep_accum > target_sweep and i < n - 1):
             direction *= -1
             next_x = cur_x + dx * direction
             sweep_accum = dx

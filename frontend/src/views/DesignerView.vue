@@ -89,6 +89,7 @@ watch(
     designer.showText,
     designer.perHoleColors,
     designer.logoDataUrl,
+    designer.twoColumnLayout,
   ],
   () => {
     if (courseStore.courseData) triggerRender()

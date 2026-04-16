@@ -132,7 +132,7 @@ def _merge_small_zones(zones: list[dict]) -> list[dict]:
     while i < len(above):
         z = above[i]
         h = z["y_bottom"] - z["y_top"]
-        if h < MIN_ZONE_HEIGHT and i > 0:
+        if h < MIN_ZONE_HEIGHT and merged_above:
             # Merge into previous zone (higher score)
             prev = merged_above[-1]
             prev["y_bottom"] = z["y_bottom"]
@@ -279,6 +279,21 @@ def compute_all_scoring_zones(
     holes = layout.get("holes", [])
     if not holes:
         return []
+
+    # Two-pass layout: compute zones for each pass independently
+    if layout.get("layout_mode") == "two_column":
+        split = layout.get("column_split", len(holes) // 2)
+        pass1_holes = holes[:split]
+        pass2_holes = holes[split:]
+        # Build sub-layouts for each pass
+        sub1 = {**layout, "holes": pass1_holes}
+        sub2 = {**layout, "holes": pass2_holes}
+        # Remove layout_mode to avoid infinite recursion
+        sub1.pop("layout_mode", None)
+        sub2.pop("layout_mode", None)
+        results1 = compute_all_scoring_zones(sub1, zone_ratios)
+        results2 = compute_all_scoring_zones(sub2, zone_ratios)
+        return results1 + results2
 
     draw_area = layout.get("draw_area", {})
     canvas_top = draw_area.get("top", 0)
@@ -882,6 +897,16 @@ def compute_all_terrain_following_zones(
     holes = layout.get("holes", [])
     if not holes:
         return []
+
+    # Two-column layout: compute each column independently
+    if layout.get("layout_mode") == "two_column":
+        split = layout.get("column_split", len(holes) // 2)
+        sub1 = {**layout, "holes": holes[:split]}
+        sub2 = {**layout, "holes": holes[split:]}
+        sub1.pop("layout_mode", None)
+        sub2.pop("layout_mode", None)
+        return (compute_all_terrain_following_zones(sub1, zone_ratios)
+                + compute_all_terrain_following_zones(sub2, zone_ratios))
 
     draw_area = layout.get("draw_area", {})
     canvas_top = draw_area.get("top", 0)

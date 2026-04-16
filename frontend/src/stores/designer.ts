@@ -54,7 +54,7 @@ export const FONT_OPTIONS = [
 export { DEFAULT_STYLES }
 
 export const useDesignerStore = defineStore('designer', () => {
-  const glassCount = ref(3)
+  const glassCount = ref(2)
   const currentGlass = ref(0)
 
   const glassDimensions = reactive({
@@ -85,6 +85,7 @@ export const useDesignerStore = defineStore('designer', () => {
   const showText = ref(true)
   const perHoleColors = ref(true)
   const showScoreLines = ref(false)
+  const twoColumnLayout = ref(true)
   const scorecardUrl = ref<string | null>(null)
   const glassSetId = ref<string | null>(null)
   const recipientName = ref('')
@@ -380,6 +381,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
       course_lat: courseLat,
       course_lng: courseLng,
       consolidate_layers: consolidateLayers.value,
+      layout: twoColumnLayout.value ? 'two_column' : 'single',
     }
   }
 
@@ -578,6 +580,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
     if (s.showText !== undefined) showText.value = s.showText
     if (s.perHoleColors !== undefined) perHoleColors.value = s.perHoleColors
     if (s.logoDataUrl !== undefined) logoDataUrl.value = s.logoDataUrl
+    if (s.twoColumnLayout !== undefined) twoColumnLayout.value = s.twoColumnLayout
   }
 
   return {
@@ -596,6 +599,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
     showText,
     perHoleColors,
     showScoreLines,
+    twoColumnLayout,
     scorecardUrl,
     glassSetId,
     recipientName,

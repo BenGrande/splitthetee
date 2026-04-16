@@ -150,12 +150,15 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
     LEFT column: hole numbers spanning full section height, rotated 90°,
                  alternating white-filled/outline rectangles.
     RIGHT column: score labels for each zone with alternating fills.
+
+    Positioned at the right edge of draw_area.
     """
-    right_edge = draw_area.get("right", 870)
     hole_col_w = 12    # hole number column width
     score_col_w = 14   # score column width
     col_gap = 2
     total_w = hole_col_w + col_gap + score_col_w
+
+    right_edge = draw_area.get("right", 870)
     start_x = right_edge - total_w - 2
 
     hole_x = start_x
@@ -816,16 +819,32 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
 
     # White elements: hole number + stats combined boxes, ruler, text, logo, QR
     if _white:
+        _is_two_col = layout.get("layout_mode") == "two_column"
+        _col_split = layout.get("column_split", 0)
+
         # Combined hole number + stats boxes (circle inside box, dotted line to tee)
-        # Pre-compute min/max tee X to detect edge holes by position
-        tee_xs = [h.get("start_x", 0) for h in holes]
-        min_tee_x = min(tee_xs) if tee_xs else 0
-        max_tee_x = max(tee_xs) if tee_xs else 0
-        svg += '<g class="layer-hole_stats">'
-        for hi, hole in enumerate(holes):
-            svg += _render_hole_stats(hole, opts, font_family,
-                                      min_tee_x=min_tee_x, max_tee_x=max_tee_x)
-        svg += "</g>"
+        # For two-pass layout, compute tee ranges per pass for edge detection
+        if _is_two_col and _col_split > 0:
+            pass1_holes = holes[:_col_split]
+            pass2_holes = holes[_col_split:]
+            for pass_holes in (pass1_holes, pass2_holes):
+                tee_xs = [h.get("start_x", 0) for h in pass_holes]
+                p_min = min(tee_xs) if tee_xs else 0
+                p_max = max(tee_xs) if tee_xs else 0
+                svg += '<g class="layer-hole_stats">'
+                for hole in pass_holes:
+                    svg += _render_hole_stats(hole, opts, font_family,
+                                              min_tee_x=p_min, max_tee_x=p_max)
+                svg += "</g>"
+        else:
+            tee_xs = [h.get("start_x", 0) for h in holes]
+            min_tee_x = min(tee_xs) if tee_xs else 0
+            max_tee_x = max(tee_xs) if tee_xs else 0
+            svg += '<g class="layer-hole_stats">'
+            for hi, hole in enumerate(holes):
+                svg += _render_hole_stats(hole, opts, font_family,
+                                          min_tee_x=min_tee_x, max_tee_x=max_tee_x)
+            svg += "</g>"
 
         # Ruler
         draw_area = layout.get("draw_area", {
@@ -833,10 +852,26 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
             "top": 30, "bottom": layout.get("canvas_height", 700) - 30,
         })
         if zones_by_hole:
-            if is_warped:
-                svg += _render_ruler_warped(zones_by_hole, layout, opts, font_family)
+            if _is_two_col and _col_split > 0:
+                zones_pass1 = zones_by_hole[:_col_split]
+                zones_pass2 = zones_by_hole[_col_split:]
+                if is_warped:
+                    # Left ruler for pass 1 (holes 1-5) — just right of course title
+                    svg += _render_ruler_warped(zones_pass1, layout, opts, font_family, side="left")
+                    # Right ruler for pass 2 (holes 6-9) — far right edge
+                    svg += _render_ruler_warped(zones_pass2, layout, opts, font_family, side="right")
+                else:
+                    # Left ruler for pass 1 — in the left ruler area (just right of title)
+                    left_ruler_right = draw_area.get("left_ruler_right", draw_area.get("left", 60))
+                    left_draw_area = {**draw_area, "right": left_ruler_right}
+                    svg += _render_ruler(zones_pass1, left_draw_area, opts, font_family)
+                    # Right ruler for pass 2
+                    svg += _render_ruler(zones_pass2, draw_area, opts, font_family)
             else:
-                svg += _render_ruler(zones_by_hole, draw_area, opts, font_family)
+                if is_warped:
+                    svg += _render_ruler_warped(zones_by_hole, layout, opts, font_family)
+                else:
+                    svg += _render_ruler(zones_by_hole, draw_area, opts, font_family)
 
     if is_warped:
         svg += "</g>"  # close clip group
@@ -951,16 +986,16 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
 
 
 def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
-                         opts: dict, font_family: str) -> str:
+                         opts: dict, font_family: str,
+                         side: str = "right") -> str:
     """Render ruler on glass sector — two-column design following curvature.
 
     In rotated coordinate space (rotated by edge_angle around origin):
     - y-axis is radial (negative = outward toward outer_r)
     - x-axis is tangential (negative = inside glass, positive = outside)
 
-    Both columns placed at NEGATIVE x (inside glass).
-    SCORE column is closer to edge (less negative x).
-    HOLE column is further inside (more negative x).
+    side="right": columns at NEGATIVE x (inside glass, right edge).
+    side="left": columns at POSITIVE x (inside glass, left edge).
     """
     t = layout.get("template", {})
     if not t:
@@ -968,17 +1003,28 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
     half_a = t["sector_angle"] / 2
     inner_r = t["inner_r"]
     outer_r = t["outer_r"]
-    edge_angle = half_a
-    rot_deg = math.degrees(edge_angle)
 
     score_col_w = 7
     hole_col_w = 8
     col_gap = 2
     min_font = 2.5
 
-    # Both columns INSIDE the glass (negative x in rotated frame)
-    score_cx = -(score_col_w / 2 + 1)
-    hole_cx = -(score_col_w + col_gap + hole_col_w / 2 + 1)
+    if side == "left":
+        # Left edge: between the course title (at angular offset 0.04) and the
+        # content area (which starts at ~0.127 for two_column layouts).
+        # Ruler columns extend tangentially in positive-x after rotation; the
+        # far-x column (score) needs to land BEFORE the content start.
+        edge_angle = -half_a + 0.07
+        rot_deg = math.degrees(edge_angle)
+        # Columns at POSITIVE x (toward glass interior = right of the left edge)
+        hole_cx = hole_col_w / 2 + 1
+        score_cx = hole_col_w + col_gap + score_col_w / 2 + 1
+    else:
+        edge_angle = half_a
+        rot_deg = math.degrees(edge_angle)
+        # Both columns INSIDE the glass (negative x in rotated frame)
+        score_cx = -(score_col_w / 2 + 1)
+        hole_cx = -(score_col_w + col_gap + hole_col_w / 2 + 1)
 
     # Use the SAME y→r conversion as warp_pt() if warp params are available.
     # This ensures ruler positions match the warped zone_line features exactly.

@@ -55,6 +55,11 @@ function clearLogo() {
           {{ n }}
         </button>
       </div>
+
+      <label class="flex items-center gap-2 text-xs text-gray-400 mt-2 cursor-pointer">
+        <input type="checkbox" v-model="store.twoColumnLayout" class="accent-emerald-500 w-3.5 h-3.5" />
+        Two-column layout
+      </label>
     </div>
 
     <!-- Glass Dimensions -->

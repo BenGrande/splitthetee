@@ -131,6 +131,8 @@ def _build_layout_and_zones(holes, options):
         "canvas_width": options.get("canvas_width", 900),
         "canvas_height": options.get("canvas_height", 700),
     }
+    if options.get("layout"):
+        layout_opts["layout"] = options["layout"]
     layout = compute_layout(holes, layout_opts)
     zone_ratios = options.get("zone_ratios")
     zones_by_hole = compute_all_scoring_zones(layout, zone_ratios)
@@ -171,8 +173,8 @@ async def render(data: dict):
     if "hole_range" in data and "hole_range" not in options:
         options["hole_range"] = data["hole_range"]
 
-    # Auto-compute hole_range if not provided
-    if "hole_range" not in options and holes:
+    # Auto-compute hole_range if not provided (skip for two_column layout)
+    if "hole_range" not in options and holes and options.get("layout") != "two_column":
         refs = [h.get("ref") for h in holes if h.get("ref") is not None]
         if refs:
             options["hole_range"] = f"Holes {min(refs)}-{max(refs)}"
@@ -188,12 +190,26 @@ async def render(data: dict):
         try:
             course_name = options.get("course_name", "Course")
             holes_per_glass = len(holes) // glass_count if glass_count else len(holes)
-            # Generate real overhead course map SVG for the scorecard
-            course_map_svg = await _render_course_map_svg(
-                holes, course_name,
-                course_lat=options.get("course_lat"),
-                course_lng=options.get("course_lng"),
-            )
+
+            # Only generate the course map SVG (slow OSM fetch) if we don't
+            # already have one cached on the existing glass_set.
+            course_map_svg = ""
+            existing_map_svg = None
+            if glass_set_id:
+                from app.services.game import glass_sets
+                existing_doc = await glass_sets().find_one(
+                    {"_id": glass_set_id}, {"course_map_svg": 1}
+                )
+                if existing_doc:
+                    existing_map_svg = existing_doc.get("course_map_svg")
+
+            if not existing_map_svg:
+                course_map_svg = await _render_course_map_svg(
+                    holes, course_name,
+                    course_lat=options.get("course_lat"),
+                    course_lng=options.get("course_lng"),
+                )
+
             glass_set = await get_or_create_glass_set(
                 glass_set_id=glass_set_id,
                 course_name=course_name,
@@ -299,6 +315,10 @@ async def render(data: dict):
             ),
             "show_score_lines": options.get("show_score_lines", False),
         }
+        # Suppress QR code and hole_range in two_column layout until layout is refined
+        if options.get("layout") == "two_column":
+            svg_opts["qr_svg"] = None
+            svg_opts["hole_range"] = None
         if mode in ("glass", "vinyl-preview", "scoring-preview"):
             if mode in ("glass", "vinyl-preview"):
                 svg_opts["vinyl_preview"] = True
@@ -373,6 +393,8 @@ async def render_cricut(data: dict):
                 "canvas_width": options.get("canvas_width", 900),
                 "canvas_height": options.get("canvas_height", 700),
             }
+            if options.get("layout"):
+                layout_opts["layout"] = options["layout"]
             layout = compute_layout(group, layout_opts)
             zone_ratios = options.get("zone_ratios")
             zones_by_hole = compute_all_scoring_zones(layout, zone_ratios)
