@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     ]
 
     # Frontend
-    FRONTEND_URL: str = "http://agentcll.local:6969"
+    FRONTEND_URL: str = "https://www.splitthetee.com"
 
     # Cache TTLs (seconds)
     SEARCH_CACHE_TTL: int = 60 * 60 * 24 * 7  # 7 days

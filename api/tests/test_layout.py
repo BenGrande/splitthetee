@@ -82,15 +82,15 @@ class TestComputeLayout:
         holes = [_make_hole(1)]
         result = compute_layout(holes, {"canvas_width": 900, "canvas_height": 700})
         da = result["draw_area"]
-        # draw_right should be canvas_width - margin_x(30) - ruler_margin(65) = 805
-        assert da["right"] == 900 - 30 - 65
-        # draw_left should be text_margin(60) + stats_margin(25) = 85
-        assert da["left"] == 60 + 25
+        # draw_right should be canvas_width - margin_x(20) - ruler_margin(50) = 830
+        assert da["right"] == 900 - 20 - 50
+        # draw_left should be text_margin(45) + stats_margin(5) = 50
+        assert da["left"] == 45 + 5
 
     def test_custom_ruler_margin(self):
         holes = [_make_hole(1)]
         result = compute_layout(holes, {"canvas_width": 900, "ruler_margin": 80})
-        assert result["draw_area"]["right"] == 900 - 30 - 80
+        assert result["draw_area"]["right"] == 900 - 20 - 80
 
     def test_difficulty_affects_angle(self):
         holes = [_make_hole(1, difficulty=1), _make_hole(2, difficulty=18)]

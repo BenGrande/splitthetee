@@ -26,7 +26,6 @@ def create_app() -> FastAPI:
         allow_origins=[
             settings.FRONTEND_URL,
             "http://localhost:5173",
-            "http://localhost:3000",
         ],
         allow_credentials=True,
         allow_methods=["*"],
@@ -119,3 +118,8 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+# Lambda handler via Mangum
+from mangum import Mangum
+
+handler = Mangum(app, lifespan="auto")

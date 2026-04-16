@@ -9,11 +9,11 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
     opts = opts or {}
     canvas_width = opts.get("canvas_width", 900)
     canvas_height = opts.get("canvas_height", 700)
-    margin_x = opts.get("margin_x", 30)
-    margin_y = opts.get("margin_y", 30)
-    text_margin = opts.get("text_margin", 60)
-    ruler_margin = opts.get("ruler_margin", 65)
-    stats_margin = opts.get("stats_margin", 25)
+    margin_x = opts.get("margin_x", 20)
+    margin_y = opts.get("margin_y", 20)
+    text_margin = opts.get("text_margin", 45)
+    ruler_margin = opts.get("ruler_margin", 50)
+    stats_margin = opts.get("stats_margin", 5)
     max_hole_width = opts.get("max_hole_width", 0.42)
     hole_padding = opts.get("hole_padding", 0.02)
 
@@ -128,7 +128,7 @@ def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float) -> list[dict
     avg_length = sum(raw_lengths) / n
     gap = avg_length * gap_fraction
 
-    cur_x = 0.12
+    cur_x = 0.06
     cur_y = 0.0
     direction = 1
     sweep_accum = 0.0
@@ -142,7 +142,7 @@ def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float) -> list[dict
         next_x = cur_x + dx * direction
         sweep_accum += dx
 
-        if next_x > 0.88 or next_x < 0.12 or (sweep_accum > target_sweep and i < n - 1):
+        if next_x > 0.94 or next_x < 0.06 or (sweep_accum > target_sweep and i < n - 1):
             direction *= -1
             next_x = cur_x + dx * direction
             sweep_accum = dx
@@ -174,10 +174,10 @@ def _rescale_to_fill(holes, draw_left, draw_top, draw_width, draw_height):
     content_max_x = -math.inf
 
     for h in holes:
-        content_min_y = min(content_min_y, h["start_y"] - 6)
-        content_max_y = max(content_max_y, h["start_y"] + 20)
-        content_min_x = min(content_min_x, h["start_x"] - 16)
-        content_max_x = max(content_max_x, h["start_x"] + 16)
+        content_min_y = min(content_min_y, h["start_y"] - 2)
+        content_max_y = max(content_max_y, h["start_y"] + 8)
+        content_min_x = min(content_min_x, h["start_x"] - 2)
+        content_max_x = max(content_max_x, h["start_x"] + 2)
         for f in h["features"]:
             for x, y in f["coords"]:
                 content_min_y = min(content_min_y, y)
@@ -205,7 +205,7 @@ def _rescale_to_fill(holes, draw_left, draw_top, draw_width, draw_height):
                 c[1] = draw_top + (c[1] - content_min_y) * y_rescale
 
 
-def _enforce_green_tee_gap(holes, min_gap: float = 30):
+def _enforce_green_tee_gap(holes, min_gap: float = 2):
     """Ensure adequate gap between upper hole's green and lower hole's tee."""
     if len(holes) < 2:
         return
@@ -243,7 +243,7 @@ def _fix_overlaps(holes):
     """Shift subsequent holes down to eliminate vertical overlap."""
     if len(holes) < 2:
         return
-    min_gap = 28
+    min_gap = 5
 
     for i in range(1, len(holes)):
         prev = holes[i - 1]
@@ -275,7 +275,7 @@ def _pack_holes(holes):
     """Pack holes tight by removing excess vertical gaps."""
     if len(holes) < 2:
         return
-    target_gap = 28
+    target_gap = 5
 
     for i in range(1, len(holes)):
         prev = holes[i - 1]

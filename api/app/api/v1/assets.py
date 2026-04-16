@@ -15,17 +15,8 @@ _logo_data_url_cache: str | None = None
 
 
 def _get_logo_path() -> Path:
-    """Resolve logo path relative to project root."""
-    # Try several locations
-    candidates = [
-        Path(__file__).resolve().parents[4] / "public" / "logo.png",
-        Path.cwd().parent / "public" / "logo.png",
-        Path.cwd() / "public" / "logo.png",
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return candidates[0]  # return first candidate even if missing
+    """Resolve logo path from the API's static directory."""
+    return Path(__file__).resolve().parents[2] / "static" / "logo.png"
 
 
 @router.get("/assets/logo")

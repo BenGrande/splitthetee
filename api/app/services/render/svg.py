@@ -366,7 +366,8 @@ def _render_terrain_zones(terrain_zones: list, opts: dict, font_family: str,
     return svg
 
 
-def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
+def _render_hole_stats(hole: dict, opts: dict, font_family: str,
+                       min_tee_x: float = 0, max_tee_x: float = 0) -> str:
     """Render hole number circle + stats in one combined box.
 
     The circle is at the top of the box, stats text below it.
@@ -403,22 +404,45 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str) -> str:
     text_area = line_height * len(lines) if lines else 0
     box_h = padding_y + circle_area + text_area + padding_y
 
-    # Position: BELOW the tee, offset to the tee side.
-    # Tee is at the top of the hole. Box goes below (between tee and green).
-    # For left-to-right holes: tee is on the LEFT, box offset left
-    # For right-to-left holes: tee is on the RIGHT, box offset right
+    # Position: BELOW the tee, offset to the tee side by default.
+    # For edge holes (tees at the far left or far right of the layout),
+    # flip the box INWARD to free up horizontal space at edges.
     tee_x = hole.get("start_x", 0)
     tee_y = hole.get("start_y", 0)
     direction = hole.get("direction", 1)
 
-    # Offset box toward the tee side
-    if direction > 0:
-        box_cx = tee_x - box_w / 2 - 2  # left of tee
+    # Detect edge holes by position: tee is at the min or max X
+    tee_x_range = max_tee_x - min_tee_x if max_tee_x > min_tee_x else 1
+    is_leftmost = (tee_x - min_tee_x) < tee_x_range * 0.15
+    is_rightmost = (max_tee_x - tee_x) < tee_x_range * 0.15
+
+    if is_leftmost and direction > 0:
+        # Leftmost hole going right — box would go LEFT (outward). Flip to RIGHT (inward).
+        box_cx = tee_x + box_w / 2 + 2
+    elif is_rightmost and direction < 0:
+        # Rightmost hole going left — box would go RIGHT (outward). Flip to LEFT (inward).
+        box_cx = tee_x - box_w / 2 - 2
     else:
-        box_cx = tee_x + box_w / 2 + 2  # right of tee
+        # Default: offset box toward the tee side
+        if direction > 0:
+            box_cx = tee_x - box_w / 2 - 2  # left of tee
+        else:
+            box_cx = tee_x + box_w / 2 + 2  # right of tee
 
     box_x = box_cx - box_w / 2
     box_y = tee_y + 2  # below the tee
+
+    # For edge holes, push box down if it would collide with fairway/tee features
+    if is_leftmost or is_rightmost:
+        box_x_left = box_cx - box_w / 2
+        box_x_right = box_cx + box_w / 2
+        max_feature_y = tee_y
+        for f in hole.get("features", []):
+            if f.get("category") in ("fairway", "tee", "rough"):
+                for fx, fy in f.get("coords", []):
+                    if box_x_left <= fx <= box_x_right and fy > tee_y and fy < tee_y + box_h + 20:
+                        max_feature_y = max(max_feature_y, fy)
+        box_y = max(box_y, max_feature_y + 2)
 
     svg = ""
 
@@ -793,9 +817,14 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
     # White elements: hole number + stats combined boxes, ruler, text, logo, QR
     if _white:
         # Combined hole number + stats boxes (circle inside box, dotted line to tee)
+        # Pre-compute min/max tee X to detect edge holes by position
+        tee_xs = [h.get("start_x", 0) for h in holes]
+        min_tee_x = min(tee_xs) if tee_xs else 0
+        max_tee_x = max(tee_xs) if tee_xs else 0
         svg += '<g class="layer-hole_stats">'
-        for hole in holes:
-            svg += _render_hole_stats(hole, opts, font_family)
+        for hi, hole in enumerate(holes):
+            svg += _render_hole_stats(hole, opts, font_family,
+                                      min_tee_x=min_tee_x, max_tee_x=max_tee_x)
         svg += "</g>"
 
         # Ruler
@@ -1314,9 +1343,13 @@ def render_svg(layout: dict, opts: dict | None = None) -> str:
 
     # Hole stats
     if "hole_stats" not in hidden and holes:
+        tee_xs = [h.get("start_x", 0) for h in holes]
+        min_tee_x = min(tee_xs) if tee_xs else 0
+        max_tee_x = max(tee_xs) if tee_xs else 0
         svg += '<g class="layer-hole_stats">'
-        for hole in holes:
-            svg += _render_hole_stats(hole, opts, font_family)
+        for hi, hole in enumerate(holes):
+            svg += _render_hole_stats(hole, opts, font_family,
+                                      min_tee_x=min_tee_x, max_tee_x=max_tee_x)
         svg += "</g>"
 
     # Ruler

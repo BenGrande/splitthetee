@@ -152,6 +152,7 @@ def compute_scoring_zones(
     available_top: float | None = None,
     available_bottom: float | None = None,
     zone_ratios: dict | None = None,
+    next_tee_top: float | None = None,
 ) -> dict:
     """Compute scoring zones for a hole layout.
 
@@ -215,24 +216,44 @@ def compute_scoring_zones(
         "position": "green",
     })
 
-    # Zones below green: +1, +2
+    # Zones below green: +1 (green to next tee), +2 (over next tee area)
     below_space = available_bottom - green_bottom
     if below_space > 0:
-        half = below_space / 2
-        zones.append({
-            "score": 1,
-            "y_top": green_bottom,
-            "y_bottom": green_bottom + half,
-            "label": "+1",
-            "position": "below",
-        })
-        zones.append({
-            "score": 2,
-            "y_top": green_bottom + half,
-            "y_bottom": available_bottom,
-            "label": "+2",
-            "position": "below",
-        })
+        if next_tee_top is not None and next_tee_top > green_bottom:
+            # +1 from green bottom to next tee top
+            zones.append({
+                "score": 1,
+                "y_top": green_bottom,
+                "y_bottom": next_tee_top,
+                "label": "+1",
+                "position": "below",
+            })
+            # +2 from next tee top to boundary (over the tee box)
+            if available_bottom > next_tee_top:
+                zones.append({
+                    "score": 2,
+                    "y_top": next_tee_top,
+                    "y_bottom": available_bottom,
+                    "label": "+2",
+                    "position": "below",
+                })
+        else:
+            # Last hole on glass or no next tee: split evenly
+            half = below_space / 2
+            zones.append({
+                "score": 1,
+                "y_top": green_bottom,
+                "y_bottom": green_bottom + half,
+                "label": "+1",
+                "position": "below",
+            })
+            zones.append({
+                "score": 2,
+                "y_top": green_bottom + half,
+                "y_bottom": available_bottom,
+                "label": "+2",
+                "position": "below",
+            })
 
     # Merge zones smaller than MIN_ZONE_HEIGHT
     zones = _merge_small_zones(zones)
@@ -264,40 +285,48 @@ def compute_all_scoring_zones(
     canvas_bottom = draw_area.get("bottom", layout.get("canvas_height", 700))
 
     # Pre-compute shared boundaries between adjacent holes.
-    # Each boundary is the midpoint between the bottom of hole N's features
-    # and the top of hole N+1's features. This ensures no overlap and no gaps.
+    # Boundaries extend past the next hole's tee so that the previous hole's
+    # below-green zones (+1, +2) can overlap into the next tee area.
+    # The next hole's +5 zone starts immediately after.
     boundaries = [canvas_top]  # top of first hole = canvas top
 
+    # Also track next-tee-top for each hole (used for +1/+2 split)
+    next_tee_tops = []
+
     for i in range(len(holes) - 1):
-        # Bottom extent of hole i
-        hole_i = holes[i]
-        i_bottom = hole_i.get("end_y", hole_i["start_y"] + 50)
-        for f in hole_i.get("features", []):
-            if f.get("category") in ("zone_line", "zone_label", "zone_label_external"):
-                continue
-            for _, y in f.get("coords", []):
-                i_bottom = max(i_bottom, y)
-
-        # Top extent of hole i+1
         hole_j = holes[i + 1]
-        j_top = hole_j.get("start_y", hole_j.get("end_y", i_bottom + 20))
-        for f in hole_j.get("features", []):
-            if f.get("category") in ("zone_line", "zone_label", "zone_label_external"):
-                continue
-            for _, y in f.get("coords", []):
-                j_top = min(j_top, y)
 
-        # Shared boundary = midpoint
-        boundary = (i_bottom + j_top) / 2
+        # Find top of next hole's tee features
+        j_tee_top = hole_j.get("start_y", hole_j.get("end_y", 0))
+        for f in hole_j.get("features", []):
+            if f.get("category") == "tee":
+                for _, y in f.get("coords", []):
+                    j_tee_top = min(j_tee_top, y)
+
+        # Find bottom of next hole's tee features
+        j_tee_bottom = hole_j.get("start_y", hole_j.get("end_y", 0))
+        for f in hole_j.get("features", []):
+            if f.get("category") == "tee":
+                for _, y in f.get("coords", []):
+                    j_tee_bottom = max(j_tee_bottom, y)
+
+        next_tee_tops.append(j_tee_top)
+
+        # Boundary extends past the next hole's tee
+        boundary = j_tee_bottom + 5
         boundaries.append(boundary)
 
+    next_tee_tops.append(None)  # last hole has no next tee
     boundaries.append(canvas_bottom)  # bottom of last hole = canvas bottom
 
     results = []
     for i, hole in enumerate(holes):
         avail_top = boundaries[i]
         avail_bottom = boundaries[i + 1]
-        result = compute_scoring_zones(hole, avail_top, avail_bottom, zone_ratios)
+        result = compute_scoring_zones(
+            hole, avail_top, avail_bottom, zone_ratios,
+            next_tee_top=next_tee_tops[i],
+        )
         results.append(result)
 
     return results
@@ -871,16 +900,17 @@ def compute_all_terrain_following_zones(
                     prev_bottom = max(prev_bottom, y)
             avail_top = prev_bottom + 2
 
-        # Bottom boundary
+        # Bottom boundary — extend past the next hole's tee
         if i == len(holes) - 1:
             avail_bottom = canvas_bottom
         else:
             nxt = holes[i + 1]
-            nxt_top = nxt["start_y"] - 2
+            nxt_tee_bottom = nxt["start_y"]
             for f in nxt.get("features", []):
-                for _, y in f.get("coords", []):
-                    nxt_top = min(nxt_top, y)
-            avail_bottom = nxt_top - 2
+                if f.get("category") == "tee":
+                    for _, y in f.get("coords", []):
+                        nxt_tee_bottom = max(nxt_tee_bottom, y)
+            avail_bottom = nxt_tee_bottom + 5
 
         tf_zones = compute_terrain_following_zones(hole, avail_top, avail_bottom, zone_ratios)
         results.append(tf_zones)
