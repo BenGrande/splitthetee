@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     # MongoDB
     MONGODB_URI: str = "mongodb://localhost:27017"
     MONGODB_DB_NAME: str = "splitthetee"
+    MONGODB_AUTH_MECHANISM: str = ""
 
     # Golf Course API
     GOLF_API_KEY: str = ""
