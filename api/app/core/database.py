@@ -62,7 +62,11 @@ async def _ensure_indexes() -> None:
 @asynccontextmanager
 async def lifespan(app):
     global _db
-    client = AsyncIOMotorClient(settings.MONGODB_URI)
+    uri = settings.MONGODB_URI
+    if "authSource" not in uri:
+        sep = "&" if "?" in uri else "?"
+        uri += f"{sep}authSource=$external"
+    client = AsyncIOMotorClient(uri)
     _db = client[settings.MONGODB_DB_NAME]
     app.state.db = _db
     try:
