@@ -3,8 +3,6 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
 import type { Glass3DData } from '../types/glass3d'
 import { computeBeerHeight } from './useGlassBeerLevel'
 
-const SCALE = 0.01
-
 /**
  * Build a simple Three.js scene of the glass for GLB export.
  * Uses basic materials (no transmission/physical) for max AR compatibility.

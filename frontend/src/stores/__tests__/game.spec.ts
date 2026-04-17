@@ -203,7 +203,7 @@ describe('game store', () => {
       ok: true,
       json: () => Promise.resolve({
         players: [
-          { player_id: 'p1', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2 },
+          { player_id: 'p1', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2, scores_by_hole: [] },
         ],
       }),
     } as Response)
@@ -380,8 +380,8 @@ describe('game store', () => {
     const store = useGameStore()
     store.courseName = 'Pebble Beach'
     store.leaderboard = [
-      { player_id: 'p1', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2 },
-      { player_id: 'p2', player_name: 'Sarah', total_score: 75, holes_played: 18, score_to_par: 3 },
+      { player_id: 'p1', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2, scores_by_hole: [] },
+      { player_id: 'p2', player_name: 'Sarah', total_score: 75, holes_played: 18, score_to_par: 3, scores_by_hole: [] },
     ]
 
     const text = store.shareLeaderboard()

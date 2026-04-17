@@ -43,8 +43,8 @@ describe('Leaderboard', () => {
     const wrapper = mountComponent()
     const store = useGameStore()
     store.leaderboard = [
-      { player_id: 'p1', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2 },
-      { player_id: 'p2', player_name: 'Sarah', total_score: 75, holes_played: 18, score_to_par: 3 },
+      { player_id: 'p1', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2, scores_by_hole: [] },
+      { player_id: 'p2', player_name: 'Sarah', total_score: 75, holes_played: 18, score_to_par: 3, scores_by_hole: [] },
     ]
     await wrapper.vm.$nextTick()
 
@@ -58,7 +58,7 @@ describe('Leaderboard', () => {
     const wrapper = mountComponent()
     const store = useGameStore()
     store.leaderboard = [
-      { player_id: 'player-456', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2 },
+      { player_id: 'player-456', player_name: 'Mike', total_score: 70, holes_played: 18, score_to_par: -2, scores_by_hole: [] },
     ]
     await wrapper.vm.$nextTick()
 
@@ -74,7 +74,7 @@ describe('Leaderboard', () => {
     const wrapper = mountComponent()
     const store = useGameStore()
     store.leaderboard = [
-      { player_id: 'p1', player_name: 'Mike', total_score: 72, holes_played: 18, score_to_par: 0 },
+      { player_id: 'p1', player_name: 'Mike', total_score: 72, holes_played: 18, score_to_par: 0, scores_by_hole: [] },
     ]
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('Auto-refreshes every 10 seconds')
