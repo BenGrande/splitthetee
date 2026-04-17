@@ -234,8 +234,7 @@ describe('game store', () => {
     const store = useGameStore()
     store.glassSetId = 'set-abc'
     store.sessionId = 'sess-123'
-    store.playerId = 'player-456'
-    store.playerName = 'Mike'
+    store.localPlayers = [{ playerId: 'player-456', playerName: 'Mike', scores: {} }]
 
     store.saveToStorage()
     expect(mockLS.setItem).toHaveBeenCalled()
@@ -243,8 +242,8 @@ describe('game store', () => {
     const data = store.loadFromStorage()
     expect(data).not.toBeNull()
     expect(data!.sessionId).toBe('sess-123')
-    expect(data!.playerId).toBe('player-456')
-    expect(data!.playerName).toBe('Mike')
+    expect(data!.players[0].playerId).toBe('player-456')
+    expect(data!.players[0].playerName).toBe('Mike')
 
     vi.unstubAllGlobals()
   })
