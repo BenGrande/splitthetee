@@ -267,7 +267,7 @@ async def render(data: dict):
             results.append({"svg": svg, "layout": layout, "zones": zones_by_hole})
             continue
         if mode == "cricut-green":
-            svg = render_cricut_green(layout, options)
+            svg = render_cricut_green(layout, options, zones_by_hole=zones_by_hole)
             results.append({"svg": svg, "layout": layout, "zones": zones_by_hole})
             continue
         if mode == "cricut-tan":
@@ -281,7 +281,7 @@ async def render(data: dict):
         if mode == "cricut-all":
             results.append({
                 "white": render_cricut_white(layout, zones_by_hole, template, options, terrain_zones=tz_dicts),
-                "green": render_cricut_green(layout, options),
+                "green": render_cricut_green(layout, options, zones_by_hole=zones_by_hole),
                 "tan": render_cricut_tan(layout, options),
                 "blue": render_cricut_blue(layout, options),
                 "guide": render_cricut_guide(layout, options),
@@ -431,7 +431,7 @@ async def render_cricut(data: dict):
 
             layers = {
                 "white": render_cricut_white(warped_layout, zones_by_hole, template, options, terrain_zones=tz_cricut),
-                "green": render_cricut_green(warped_layout, options),
+                "green": render_cricut_green(warped_layout, options, zones_by_hole=zones_by_hole),
                 "tan": render_cricut_tan(warped_layout, options),
                 "blue": render_cricut_blue(warped_layout, options),
                 "guide": render_cricut_guide(warped_layout, options),

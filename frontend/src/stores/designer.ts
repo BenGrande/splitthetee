@@ -58,11 +58,11 @@ export const useDesignerStore = defineStore('designer', () => {
   const currentGlass = ref(0)
 
   const glassDimensions = reactive({
-    height: 150,
+    height: 147,
     topRadius: 44,
     bottomRadius: 30,
     wallThickness: 3.1,
-    baseThickness: 16.5,
+    baseThickness: 12,
     // Diameter helpers for UI — stored as radius internally, displayed as diameter
     get topDiameter() { return this.topRadius * 2 },
     set topDiameter(v: number) { this.topRadius = v / 2 },

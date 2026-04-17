@@ -21,6 +21,9 @@ class Settings(BaseSettings):
         "https://overpass-api.de/api/interpreter",
     ]
 
+    # Auth
+    JWT_SECRET: str = ""
+
     # Frontend
     FRONTEND_URL: str = "https://www.splitthetee.com"
 

@@ -148,11 +148,12 @@ def render_cricut_white(layout: dict, zones_by_hole: list[dict],
     return _render_vinyl_preview(layout, render_opts, layer="white")
 
 
-def render_cricut_green(layout: dict, opts: dict | None = None) -> str:
+def render_cricut_green(layout: dict, opts: dict | None = None,
+                        zones_by_hole: list | None = None) -> str:
     """Render green vinyl layer — delegates to shared vinyl preview renderer."""
     from app.services.render.svg import _render_vinyl_preview
     opts = opts or {}
-    render_opts = {**opts, "vinyl_preview": True, "zones_by_hole": []}
+    render_opts = {**opts, "vinyl_preview": True, "zones_by_hole": zones_by_hole or []}
     return _render_vinyl_preview(layout, render_opts, layer="green")
 
 

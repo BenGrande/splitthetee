@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 import re
 
+from app.services.render.glyphs import text_to_path_d, text_width
+
 DEFAULT_STYLES = {
     "course_boundary": {"fill": "#3d6b3d", "stroke": "#2d5a2d", "stroke_width": 0.5, "opacity": 0.2},
     "rough": {"fill": "#8ab878", "stroke": "none", "stroke_width": 0, "opacity": 0.5},
@@ -116,6 +118,52 @@ def _esc_xml(s: str) -> str:
     return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+def _svg_text_or_path(
+    text: str,
+    x: float,
+    y: float,
+    font_size: float,
+    fill: str,
+    font_family: str,
+    cricut: bool = False,
+    anchor: str = "middle",
+    font_weight: str = "700",
+    opacity: str = "1",
+    dominant_baseline: str = "",
+    rotation_deg: float = 0,
+    rotation_cx: float = 0,
+    rotation_cy: float = 0,
+    transform: str = "",
+) -> str:
+    """Render text as SVG ``<text>`` (preview) or ``<path>`` (cricut).
+
+    When *cricut* is True the text is converted to outlined glyph paths
+    so Cricut Design Space can cut it without needing the font installed.
+    """
+    if cricut:
+        d = text_to_path_d(
+            text, x, y, font_size, anchor=anchor,
+            rotation_deg=rotation_deg,
+            rotation_cx=rotation_cx, rotation_cy=rotation_cy,
+        )
+        if not d:
+            return ""
+        extra = ""
+        if transform:
+            extra = f' transform="{transform}"'
+        return f'<path d="{d}" fill="{fill}" opacity="{opacity}"{extra}/>'
+    else:
+        db = f' dominant-baseline="{dominant_baseline}"' if dominant_baseline else ''
+        xform = ""
+        if transform:
+            xform = f' transform="{transform}"'
+        return (
+            f'<text x="{_ff(x)}" y="{_ff(y)}" text-anchor="{anchor}"{db} '
+            f'fill="{fill}" font-size="{_ff(font_size)}" font-weight="{font_weight}" '
+            f'font-family="{font_family}" opacity="{opacity}"{xform}>{_esc_xml(text)}</text>'
+        )
+
+
 def _coords_to_path(coords: list[list[float]], closed: bool = True) -> str:
     if not coords or len(coords) < 2:
         return ""
@@ -145,7 +193,9 @@ def _build_text_paths(template: dict) -> str:
 
 
 def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_family: str,
-                  side: str = "right", scores_inside: bool = False) -> str:
+                  side: str = "right", scores_inside: bool = False,
+                  white_only: bool = False, green_only: bool = False,
+                  cricut: bool = False) -> str:
     """Render vertical ruler — two-column design.
 
     Columns: hole number rect (spans section height, rotated 90°) and
@@ -225,36 +275,40 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
 
         # --- Hole number rect spanning FULL section height ---
         hole_font = min(8, max(4, section_h * 0.12))
+        hcx = hole_x + hole_col_w / 2
+        hcy = section_top + section_h / 2
         if is_odd:
-            svg += (
-                f'<rect x="{_ff(hole_x)}" y="{_ff(section_top)}" '
-                f'width="{_ff(hole_col_w)}" height="{_ff(section_h)}" rx="1.5" '
-                f'fill="white" stroke="none" opacity="1"/>'
-            )
-            hcx = hole_x + hole_col_w / 2
-            hcy = section_top + section_h / 2
-            svg += (
-                f'<text x="{_ff(hcx)}" y="{_ff(hcy)}" '
-                f'text-anchor="middle" dominant-baseline="central" '
-                f'fill="#1a1a1a" font-size="{_ff(hole_font)}" font-weight="700" '
-                f'font-family="{font_family}" '
-                f'transform="rotate(-90, {_ff(hcx)}, {_ff(hcy)})">{hole_ref}</text>'
-            )
+            if cricut:
+                # Compound path: rect with hole-number cutout
+                rect_d = (f"M{_ff(hole_x)},{_ff(section_top)}"
+                          f"h{_ff(hole_col_w)}v{_ff(section_h)}h{_ff(-hole_col_w)}Z")
+                num_d = text_to_path_d(str(hole_ref), hcx, hcy, hole_font,
+                                       anchor="middle", rotation_deg=-90,
+                                       rotation_cx=hcx, rotation_cy=hcy)
+                svg += f'<path d="{rect_d}{num_d}" fill="white" fill-rule="evenodd"/>'
+            else:
+                svg += (
+                    f'<rect x="{_ff(hole_x)}" y="{_ff(section_top)}" '
+                    f'width="{_ff(hole_col_w)}" height="{_ff(section_h)}" rx="1.5" '
+                    f'fill="white" stroke="none" opacity="1"/>'
+                )
+                svg += _svg_text_or_path(
+                    str(hole_ref), hcx, hcy, hole_font, "#1a1a1a", font_family,
+                    transform=f"rotate(-90, {_ff(hcx)}, {_ff(hcy)})",
+                )
         else:
             svg += (
                 f'<rect x="{_ff(hole_x)}" y="{_ff(section_top)}" '
                 f'width="{_ff(hole_col_w)}" height="{_ff(section_h)}" rx="1.5" '
                 f'fill="none" stroke="white" stroke-width="0.5" opacity="1"/>'
             )
-            hcx = hole_x + hole_col_w / 2
-            hcy = section_top + section_h / 2
-            svg += (
-                f'<text x="{_ff(hcx)}" y="{_ff(hcy)}" '
-                f'text-anchor="middle" dominant-baseline="central" '
-                f'fill="white" font-size="{_ff(hole_font)}" font-weight="700" '
-                f'font-family="{font_family}" '
-                f'transform="rotate(-90, {_ff(hcx)}, {_ff(hcy)})">{hole_ref}</text>'
-            )
+            if cricut:
+                svg += f'<path d="{text_to_path_d(str(hole_ref), hcx, hcy, hole_font, anchor="middle", rotation_deg=-90, rotation_cx=hcx, rotation_cy=hcy)}" fill="white"/>'
+            else:
+                svg += _svg_text_or_path(
+                    str(hole_ref), hcx, hcy, hole_font, "white", font_family,
+                    transform=f"rotate(-90, {_ff(hcx)}, {_ff(hcy)})",
+                )
 
         # --- Score rects in separate column ---
         for zone in zones:
@@ -271,31 +325,70 @@ def _render_ruler(zones_by_hole: list[dict], draw_area: dict, opts: dict, font_f
             # Adaptive font: scale to fit zone height, max 7, min 3
             label_font = min(7, max(3, zh * 0.7))
 
-            is_odd_score = score in (1, 3, 5)
-            if is_odd_score:
+            _GREEN = "#4ade80"
+            _is_green_zone = score in (0, -1)
+
+            # green_only: render ONLY the green zones (0, -1) — for the green cricut layer
+            # white_only: render ONLY the non-green zones — for the white cricut layer
+            if green_only and not _is_green_zone:
+                continue
+            if white_only and _is_green_zone:
+                continue
+
+            # Helper: score zone rect with label (text or path)
+            label_y = y_mid + label_font * 0.35
+            rect_d = (f"M{_ff(score_x)},{_ff(zt)}"
+                      f"h{_ff(score_col_w)}v{_ff(zh)}h{_ff(-score_col_w)}Z")
+
+            if score == -1:
+                # Solid green fill with label knocked out
+                if cricut and zh >= 4:
+                    num_d = text_to_path_d(label, score_cx, label_y, label_font, anchor="middle")
+                    svg += f'<path d="{rect_d}{num_d}" fill="{_GREEN}" fill-rule="evenodd"/>'
+                else:
+                    svg += (
+                        f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
+                        f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
+                        f'fill="{_GREEN}" stroke="none" opacity="1"/>'
+                    )
+                    if zh >= 4:
+                        svg += _svg_text_or_path(label, score_cx, label_y, label_font,
+                                                 "#1a1a1a", font_family)
+            elif score == 0:
+                # Green outline + green label
                 svg += (
                     f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
                     f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
-                    f'fill="white" stroke="none" opacity="1"/>'
+                    f'fill="none" stroke="{_GREEN}" stroke-width="0.5" opacity="1"/>'
                 )
-                if zh >= 4:  # only render text if zone tall enough
+                if zh >= 4:
+                    svg += _svg_text_or_path(label, score_cx, label_y, label_font,
+                                             _GREEN, font_family, cricut=cricut)
+            elif score in (1, 3, 5):
+                # White fill with label knocked out
+                if cricut and zh >= 4:
+                    num_d = text_to_path_d(label, score_cx, label_y, label_font, anchor="middle")
+                    svg += f'<path d="{rect_d}{num_d}" fill="white" fill-rule="evenodd"/>'
+                else:
                     svg += (
-                        f'<text x="{_ff(score_cx)}" y="{_ff(y_mid + label_font * 0.35)}" '
-                        f'text-anchor="middle" fill="#1a1a1a" font-size="{_ff(label_font)}" font-weight="700" '
-                        f'font-family="{font_family}">{_esc_xml(label)}</text>'
+                        f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
+                        f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
+                        f'fill="white" stroke="none" opacity="1"/>'
                     )
+                    if zh >= 4:
+                        svg += _svg_text_or_path(label, score_cx, label_y, label_font,
+                                                 "#1a1a1a", font_family)
             else:
+                # Even positive scores: outline + text
                 svg += (
                     f'<rect x="{_ff(score_x)}" y="{_ff(zt)}" '
                     f'width="{_ff(score_col_w)}" height="{_ff(zh)}" '
                     f'fill="none" stroke="white" stroke-width="0.5" opacity="1"/>'
                 )
                 if zh >= 4:
-                    svg += (
-                        f'<text x="{_ff(score_cx)}" y="{_ff(y_mid + label_font * 0.35)}" '
-                        f'text-anchor="middle" fill="white" font-size="{_ff(label_font)}" '
-                        f'font-family="{font_family}" opacity="0.7">{_esc_xml(label)}</text>'
-                    )
+                    svg += _svg_text_or_path(label, score_cx, label_y, label_font,
+                                             "white", font_family, cricut=cricut,
+                                             opacity="0.7")
 
     svg += "</g>"
     return svg
@@ -855,10 +948,13 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
             )
         svg += '</g>'
 
+    _is_two_col = layout.get("layout_mode") == "two_column"
+    _col_split = layout.get("column_split", 0)
+    _ruler_cricut = layer != "all"
+    _ruler_white_only = layer != "all"
+
     # White elements: hole number + stats combined boxes, ruler, text, logo, QR
     if _white:
-        _is_two_col = layout.get("layout_mode") == "two_column"
-        _col_split = layout.get("column_split", 0)
 
         # Combined hole number + stats boxes (circle inside box, dotted line to tee)
         # For two-pass layout, compute tee ranges per pass for edge detection
@@ -890,30 +986,34 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
             "top": 30, "bottom": layout.get("canvas_height", 700) - 30,
         })
         if zones_by_hole:
+            # Ruler flags already set above (_ruler_white_only, _ruler_cricut)
+
             if _is_two_col and _col_split > 0:
                 zones_pass1 = zones_by_hole[:_col_split]
                 zones_pass2 = zones_by_hole[_col_split:]
                 if is_warped:
-                    # Left ruler for pass 1 (holes 1-5) — just right of course title
                     svg += _render_ruler_warped(zones_pass1, layout, opts, font_family,
-                                                side="left", scores_inside=True)
-                    # Right ruler for pass 2 (holes 6-9) — far right edge
+                                                side="left", scores_inside=True,
+                                                white_only=_ruler_white_only)
                     svg += _render_ruler_warped(zones_pass2, layout, opts, font_family,
-                                                side="right", scores_inside=True)
+                                                side="right", scores_inside=True,
+                                                white_only=_ruler_white_only)
                 else:
-                    # Left ruler for pass 1 — in the left ruler area (just right of title)
                     left_ruler_right = draw_area.get("left_ruler_right", draw_area.get("left", 60))
                     left_draw_area = {**draw_area, "right": left_ruler_right}
                     svg += _render_ruler(zones_pass1, left_draw_area, opts, font_family,
-                                         side="left", scores_inside=True)
-                    # Right ruler for pass 2
+                                         side="left", scores_inside=True,
+                                         white_only=_ruler_white_only, cricut=_ruler_cricut)
                     svg += _render_ruler(zones_pass2, draw_area, opts, font_family,
-                                         side="right", scores_inside=True)
+                                         side="right", scores_inside=True,
+                                         white_only=_ruler_white_only, cricut=_ruler_cricut)
             else:
                 if is_warped:
-                    svg += _render_ruler_warped(zones_by_hole, layout, opts, font_family)
+                    svg += _render_ruler_warped(zones_by_hole, layout, opts, font_family,
+                                                white_only=_ruler_white_only, cricut=_ruler_cricut)
                 else:
-                    svg += _render_ruler(zones_by_hole, draw_area, opts, font_family)
+                    svg += _render_ruler(zones_by_hole, draw_area, opts, font_family,
+                                         white_only=_ruler_white_only, cricut=_ruler_cricut)
 
     if is_warped:
         svg += "</g>"  # close clip group
@@ -944,6 +1044,35 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
         # Green parts of logo (lettering) next to QR
         if opts.get("qr_svg"):
             svg += _render_embedded_qr(layout, opts, font_family, logo_layer="green", qr_only=False)
+
+        # Green ruler zones (score 0 and -1) on the green layer
+        if zones_by_hole:
+            if _is_two_col and _col_split > 0:
+                zones_pass1 = zones_by_hole[:_col_split]
+                zones_pass2 = zones_by_hole[_col_split:]
+                if is_warped:
+                    svg += _render_ruler_warped(zones_pass1, layout, opts, font_family,
+                                                side="left", scores_inside=True,
+                                                green_only=True, cricut=_ruler_cricut)
+                    svg += _render_ruler_warped(zones_pass2, layout, opts, font_family,
+                                                side="right", scores_inside=True,
+                                                green_only=True, cricut=_ruler_cricut)
+                else:
+                    left_ruler_right = draw_area.get("left_ruler_right", draw_area.get("left", 60))
+                    left_draw_area = {**draw_area, "right": left_ruler_right}
+                    svg += _render_ruler(zones_pass1, left_draw_area, opts, font_family,
+                                         side="left", scores_inside=True,
+                                         green_only=True, cricut=_ruler_cricut)
+                    svg += _render_ruler(zones_pass2, draw_area, opts, font_family,
+                                         side="right", scores_inside=True,
+                                         green_only=True, cricut=_ruler_cricut)
+            else:
+                if is_warped:
+                    svg += _render_ruler_warped(zones_by_hole, layout, opts, font_family,
+                                                green_only=True, cricut=_ruler_cricut)
+                else:
+                    svg += _render_ruler(zones_by_hole, draw_area, opts, font_family,
+                                         green_only=True, cricut=_ruler_cricut)
 
     # Debug overlay: red arcs at each zone boundary following glass curvature.
     if opts.get("show_score_lines") and zones_by_hole:
@@ -1029,7 +1158,9 @@ def _render_vinyl_preview(layout: dict, opts: dict, layer: str = "all") -> str:
 
 def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
                          opts: dict, font_family: str,
-                         side: str = "right", scores_inside: bool = False) -> str:
+                         side: str = "right", scores_inside: bool = False,
+                         white_only: bool = False, green_only: bool = False,
+                         cricut: bool = False) -> str:
     """Render ruler on glass sector — two-column design following curvature.
 
     side='left':  ruler on glass's left edge (rotated by -half_a + offset).
@@ -1115,44 +1246,51 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
 
         is_odd = (hole_ref % 2 == 1) if isinstance(hole_ref, int) else True
 
-        # Hole number rect: spans FULL adjusted section height
+        # Hole number rect: spans FULL adjusted section height.
+        # Skip for green-only pass — hole numbers belong on white layer.
         hn_h = total_section
         ry_top = -section_r_top
 
-        svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
-
-        if is_odd:
-            svg += (
-                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(ry_top)}" '
-                f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
-                f'fill="white" stroke="none" opacity="1"/>'
-            )
-            text_cy = ry_top + hn_h / 2
-            fs = min(5, max(min_font, hn_h * 0.6))
-            svg += (
-                f'<text x="{_ff(hole_cx)}" y="{_ff(text_cy)}" '
-                f'text-anchor="middle" dominant-baseline="central" '
-                f'fill="#1a1a1a" font-size="{_ff(fs)}" font-weight="700" '
-                f'font-family="{font_family}" '
-                f'transform="rotate(-90, {_ff(hole_cx)}, {_ff(text_cy)})">{hole_ref}</text>'
-            )
-        else:
-            svg += (
-                f'<rect x="{_ff(hole_cx - hole_col_w / 2)}" y="{_ff(ry_top)}" '
-                f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
-                f'fill="none" stroke="white" stroke-width="0.5" opacity="1"/>'
-            )
-            text_cy = ry_top + hn_h / 2
-            fs = min(5, max(min_font, hn_h * 0.6))
-            svg += (
-                f'<text x="{_ff(hole_cx)}" y="{_ff(text_cy)}" '
-                f'text-anchor="middle" dominant-baseline="central" '
-                f'fill="white" font-size="{_ff(fs)}" font-weight="700" '
-                f'font-family="{font_family}" '
-                f'transform="rotate(-90, {_ff(hole_cx)}, {_ff(text_cy)})">{hole_ref}</text>'
-            )
-
-        svg += '</g>'
+        if not green_only:
+            svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
+            if is_odd:
+                text_cy = ry_top + hn_h / 2
+                fs = min(5, max(min_font, hn_h * 0.6))
+                hx_left = hole_cx - hole_col_w / 2
+                if cricut:
+                    rect_d = (f"M{_ff(hx_left)},{_ff(ry_top)}"
+                              f"h{_ff(hole_col_w)}v{_ff(hn_h)}h{_ff(-hole_col_w)}Z")
+                    num_d = text_to_path_d(str(hole_ref), hole_cx, text_cy, fs,
+                                           anchor="middle", rotation_deg=-90,
+                                           rotation_cx=hole_cx, rotation_cy=text_cy)
+                    svg += f'<path d="{rect_d}{num_d}" fill="white" fill-rule="evenodd"/>'
+                else:
+                    svg += (
+                        f'<rect x="{_ff(hx_left)}" y="{_ff(ry_top)}" '
+                        f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
+                        f'fill="white" stroke="none" opacity="1"/>'
+                    )
+                    svg += _svg_text_or_path(
+                        str(hole_ref), hole_cx, text_cy, fs, "#1a1a1a", font_family,
+                        transform=f"rotate(-90, {_ff(hole_cx)}, {_ff(text_cy)})",
+                    )
+            else:
+                text_cy = ry_top + hn_h / 2
+                fs = min(5, max(min_font, hn_h * 0.6))
+                hx_left = hole_cx - hole_col_w / 2
+                svg += (
+                    f'<rect x="{_ff(hx_left)}" y="{_ff(ry_top)}" '
+                    f'width="{_ff(hole_col_w)}" height="{_ff(hn_h)}" rx="1.5" '
+                    f'fill="none" stroke="white" stroke-width="0.5" opacity="1"/>'
+                )
+                if cricut:
+                    svg += f'<path d="{text_to_path_d(str(hole_ref), hole_cx, text_cy, fs, anchor="middle", rotation_deg=-90, rotation_cx=hole_cx, rotation_cy=text_cy)}" fill="white"/>'
+                else:
+                    svg += _svg_text_or_path(
+                        str(hole_ref), hole_cx, text_cy, fs, "white", font_family,
+                        transform=f"rotate(-90, {_ff(hole_cx)}, {_ff(text_cy)})",
+                    )
+            svg += '</g>'
 
         # Score rects at RAW zone positions — no proportional redistribution.
         # Each zone renders at its exact _y_to_r(y_top) to _y_to_r(y_bottom).
@@ -1167,55 +1305,101 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
 
         svg += f'<g transform="rotate({_ff(rot_deg)}, 0, 0)">'
 
-        # Step 1: Draw ONE white background rect for the entire score column
+        _GREEN = "#4ade80"
+
         score_total = abs(zone_edges[0] - zone_edges[-1])
-        svg += (
-            f'<rect x="{_ff(sx)}" y="{_ff(-zone_edges[0])}" '
-            f'width="{_ff(sw)}" height="{_ff(score_total)}" '
-            f'fill="white" stroke="none"/>'
-        )
 
-        # Step 2: Draw dark rects for "even" zones (0, -1, +2, +4)
-        # These punch through the white background to show dark
-        for zi, zone in enumerate(zones):
-            score = zone.get("score", 0)
-            is_odd_score = score in (1, 3, 5)
-            if is_odd_score:
-                continue  # stays white
-
-            r_t = zone_edges[zi]
-            r_b = zone_edges[zi + 1]
-            zone_r = abs(r_t - r_b)
-            if zone_r < 0.2:
-                continue
-
+        if not green_only:
+            # Step 1: White background for the score column
             svg += (
-                f'<rect x="{_ff(sx)}" y="{_ff(-r_t)}" '
-                f'width="{_ff(sw)}" height="{_ff(zone_r)}" '
-                f'fill="#1a1a1a" stroke="none"/>'
+                f'<rect x="{_ff(sx)}" y="{_ff(-zone_edges[0])}" '
+                f'width="{_ff(sw)}" height="{_ff(score_total)}" '
+                f'fill="white" stroke="none"/>'
             )
 
-        # Step 3: Draw thin white outline around the entire column
-        svg += (
-            f'<rect x="{_ff(sx)}" y="{_ff(-zone_edges[0])}" '
-            f'width="{_ff(sw)}" height="{_ff(score_total)}" '
-            f'fill="none" stroke="white" stroke-width="0.3"/>'
-        )
+            # Step 2: Dark punch-throughs for outline zones (+2, +4, and
+            # 0 on white layer — 0's green is on the green layer instead).
+            for zi, zone in enumerate(zones):
+                score = zone.get("score", 0)
+                r_t = zone_edges[zi]
+                r_b = zone_edges[zi + 1]
+                zone_r = abs(r_t - r_b)
+                if zone_r < 0.2:
+                    continue
+                if score in (1, 3, 5):
+                    continue  # stays white
+                if score == -1:
+                    if white_only:
+                        continue  # -1 green fill rendered on green layer
+                    svg += (
+                        f'<rect x="{_ff(sx)}" y="{_ff(-r_t)}" '
+                        f'width="{_ff(sw)}" height="{_ff(zone_r)}" '
+                        f'fill="{_GREEN}" stroke="none"/>'
+                    )
+                elif score == 0:
+                    svg += (
+                        f'<rect x="{_ff(sx)}" y="{_ff(-r_t)}" '
+                        f'width="{_ff(sw)}" height="{_ff(zone_r)}" '
+                        f'fill="#1a1a1a" stroke="none"/>'
+                    )
+                else:
+                    svg += (
+                        f'<rect x="{_ff(sx)}" y="{_ff(-r_t)}" '
+                        f'width="{_ff(sw)}" height="{_ff(zone_r)}" '
+                        f'fill="#1a1a1a" stroke="none"/>'
+                    )
 
-        # Step 4: Draw horizontal divider lines at each zone edge
-        for zi in range(1, len(zone_edges) - 1):
-            ey = -zone_edges[zi]
+            # Step 3: White outline
             svg += (
-                f'<line x1="{_ff(sx)}" y1="{_ff(ey)}" '
-                f'x2="{_ff(sx + sw)}" y2="{_ff(ey)}" '
-                f'stroke="white" stroke-width="0.2"/>'
+                f'<rect x="{_ff(sx)}" y="{_ff(-zone_edges[0])}" '
+                f'width="{_ff(sw)}" height="{_ff(score_total)}" '
+                f'fill="none" stroke="white" stroke-width="0.3"/>'
             )
 
-        # Step 5: Score labels
+            # Step 4: Divider lines
+            for zi in range(1, len(zone_edges) - 1):
+                ey = -zone_edges[zi]
+                svg += (
+                    f'<line x1="{_ff(sx)}" y1="{_ff(ey)}" '
+                    f'x2="{_ff(sx + sw)}" y2="{_ff(ey)}" '
+                    f'stroke="white" stroke-width="0.2"/>'
+                )
+
+        # Green-zone overlays (rendered on both "all" and "green" layers)
+        if not white_only:
+            for zi, zone in enumerate(zones):
+                score = zone.get("score", 0)
+                if score not in (0, -1):
+                    continue
+                r_t = zone_edges[zi]
+                r_b = zone_edges[zi + 1]
+                zone_r = abs(r_t - r_b)
+                if zone_r < 0.2:
+                    continue
+                if score == -1 and green_only:
+                    # On the green layer only: solid green fill for -1
+                    svg += (
+                        f'<rect x="{_ff(sx)}" y="{_ff(-r_t)}" '
+                        f'width="{_ff(sw)}" height="{_ff(zone_r)}" '
+                        f'fill="{_GREEN}" stroke="none"/>'
+                    )
+                if score == 0:
+                    # Green outline for 0 zone
+                    svg += (
+                        f'<rect x="{_ff(sx)}" y="{_ff(-r_t)}" '
+                        f'width="{_ff(sw)}" height="{_ff(zone_r)}" '
+                        f'fill="none" stroke="{_GREEN}" stroke-width="0.4"/>'
+                    )
+
+        # Score labels
         for zi, zone in enumerate(zones):
             label = zone["label"]
             score = zone.get("score", 0)
-            is_odd_score = score in (1, 3, 5)
+            _is_green_zone = score in (0, -1)
+            if green_only and not _is_green_zone:
+                continue
+            if white_only and _is_green_zone:
+                continue
 
             r_t = zone_edges[zi]
             r_b = zone_edges[zi + 1]
@@ -1225,16 +1409,20 @@ def _render_ruler_warped(zones_by_hole: list[dict], layout: dict,
 
             r_mid_y = -(r_t + r_b) / 2
             fs = min(3.5, max(1.2, zone_r * 0.6))
-            # Never let text exceed zone height
             if fs > zone_r * 0.85:
                 fs = zone_r * 0.85
 
-            text_fill = "#1a1a1a" if is_odd_score else "white"
-            svg += (
-                f'<text x="{_ff(score_cx)}" y="{_ff(r_mid_y + fs * 0.35)}" '
-                f'text-anchor="middle" fill="{text_fill}" font-size="{_ff(fs)}" font-weight="700" '
-                f'font-family="{font_family}">{_esc_xml(label)}</text>'
-            )
+            if score == -1:
+                text_fill = "#1a1a1a"
+            elif score == 0:
+                text_fill = _GREEN
+            elif score in (1, 3, 5):
+                text_fill = "#1a1a1a"
+            else:
+                text_fill = "white"
+            label_y = r_mid_y + fs * 0.35
+            svg += _svg_text_or_path(label, score_cx, label_y, fs,
+                                     text_fill, font_family, cricut=cricut)
 
         svg += '</g>'
 

@@ -1,6 +1,10 @@
 import logging
 import time
 
+from app.core.aws_secrets import load_aws_secrets
+
+load_aws_secrets()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,6 +30,7 @@ def create_app() -> FastAPI:
         allow_origins=[
             settings.FRONTEND_URL,
             "http://localhost:5173",
+            "http://localhost:6969",
         ],
         allow_credentials=True,
         allow_methods=["*"],
