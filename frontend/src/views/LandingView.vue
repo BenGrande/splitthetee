@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useHead } from '@unhead/vue'
 import PreorderForm from '../components/PreorderForm.vue'
 
@@ -42,6 +43,10 @@ const websiteLd = {
   },
 }
 
+const jsonLdHtml = computed(
+  () => `<script type="application/ld+json">${JSON.stringify([organizationLd, websiteLd])}<\/script>`,
+)
+
 useHead({
   title: 'Split the Tee — Drink your favorite golf course',
   meta: [
@@ -60,15 +65,12 @@ useHead({
     { name: 'twitter:card', content: 'summary_large_image' },
   ],
   link: [{ rel: 'canonical', href: 'https://www.splitthetee.com/' }],
-  script: [
-    { type: 'application/ld+json', innerHTML: JSON.stringify(organizationLd) },
-    { type: 'application/ld+json', innerHTML: JSON.stringify(websiteLd) },
-  ],
 })
 </script>
 
 <template>
   <div class="min-h-screen bg-emerald-950 text-white">
+    <div v-html="jsonLdHtml" class="hidden" />
     <!-- Nav -->
     <header class="absolute top-0 inset-x-0 z-30 px-6 py-4 flex items-center justify-center">
       <img
