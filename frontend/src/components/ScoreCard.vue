@@ -148,15 +148,131 @@ function onMapTouchEnd(e: TouchEvent) {
 
 // ── Per-hole marker visibility + ball arc animation ──
 
-function currentMarkerEl(hole: number): SVGGElement | null {
+function currentMarkerCoords(hole: number): { teeX: number; teeY: number; greenX: number; greenY: number } | null {
   const el = mapContainer.value
   if (!el) return null
-  return el.querySelector(`.hole-marker[data-hole="${hole}"]`) as SVGGElement | null
+  const markers = el.querySelectorAll<SVGGElement>(`.hole-marker[data-hole="${hole}"]`)
+  let teeX: number | null = null
+  let teeY: number | null = null
+  let greenX: number | null = null
+  let greenY: number | null = null
+  markers.forEach((m) => {
+    const tx = Number(m.dataset.teeX)
+    const ty = Number(m.dataset.teeY)
+    const gx = Number(m.dataset.greenX)
+    const gy = Number(m.dataset.greenY)
+    if (isFinite(tx) && isFinite(ty) && teeX === null) { teeX = tx; teeY = ty }
+    if (isFinite(gx) && isFinite(gy) && greenX === null) { greenX = gx; greenY = gy }
+  })
+  if (teeX === null || teeY === null || greenX === null || greenY === null) return null
+  return { teeX, teeY, greenX, greenY }
+}
+
+function tagLegacyMarkers() {
+  const svg = mapContainer.value?.querySelector('svg') as SVGSVGElement | null
+  if (!svg) return
+  if (svg.querySelector('.hole-marker')) return // already modern format
+
+  const children = Array.from(svg.children) as Element[]
+  const toWrap: { hole: string; nodes: Element[]; tee?: [number, number]; green?: [number, number] }[] = []
+
+  let i = 0
+  while (i < children.length) {
+    const el = children[i]
+    const next = children[i + 1]
+
+    // Pattern A: on-green hole label = <circle r="4"> + <text>N</text>
+    if (
+      el.tagName === 'circle'
+      && el.getAttribute('r') === '4'
+      && next
+      && next.tagName === 'text'
+    ) {
+      const hole = (next.textContent || '').trim()
+      if (/^\d+$/.test(hole)) {
+        const cx = Number(el.getAttribute('cx'))
+        const cy = Number(el.getAttribute('cy'))
+        toWrap.push({
+          hole,
+          nodes: [el, next],
+          green: isFinite(cx) && isFinite(cy) ? [cx, cy] : undefined,
+        })
+        i += 2
+        continue
+      }
+    }
+
+    // Pattern B: stats box = <line> + <rect> + <circle r="3.5"> + <text>N</text> + stats <text>s
+    const statsHoleNumText = children[i + 3]
+    if (
+      el.tagName === 'line'
+      && next?.tagName === 'rect'
+      && children[i + 2]?.tagName === 'circle'
+      && children[i + 2]?.getAttribute('r') === '3.5'
+      && statsHoleNumText?.tagName === 'text'
+    ) {
+      const hole = (statsHoleNumText.textContent || '').trim()
+      if (/^\d+$/.test(hole)) {
+        const nodes: Element[] = [el, next, children[i + 2], statsHoleNumText]
+        let j = i + 4
+        while (j < children.length && children[j].tagName === 'text') {
+          const txt = (children[j].textContent || '').trim()
+          if (/^\d+$/.test(txt)) break
+          nodes.push(children[j])
+          j++
+        }
+        const tx = Number(el.getAttribute('x1'))
+        const ty = Number(el.getAttribute('y1'))
+        toWrap.push({
+          hole,
+          nodes,
+          tee: isFinite(tx) && isFinite(ty) ? [tx, ty] : undefined,
+        })
+        i = j
+        continue
+      }
+    }
+    i++
+  }
+
+  for (const cluster of toWrap) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    g.setAttribute('class', 'hole-marker')
+    g.setAttribute('data-hole', cluster.hole)
+    if (cluster.tee) {
+      g.setAttribute('data-tee-x', String(cluster.tee[0]))
+      g.setAttribute('data-tee-y', String(cluster.tee[1]))
+    }
+    if (cluster.green) {
+      g.setAttribute('data-green-x', String(cluster.green[0]))
+      g.setAttribute('data-green-y', String(cluster.green[1]))
+    }
+    const first = cluster.nodes[0]
+    first.parentNode?.insertBefore(g, first)
+    for (const n of cluster.nodes) g.appendChild(n)
+  }
+
+  // Ensure the ball layer exists on legacy SVGs too.
+  if (!svg.querySelector('#ball-marker')) {
+    const layer = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    layer.setAttribute('id', 'ball-layer')
+    layer.setAttribute('style', 'pointer-events:none')
+    const ball = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+    ball.setAttribute('id', 'ball-marker')
+    ball.setAttribute('r', '1.6')
+    ball.setAttribute('fill', '#fff')
+    ball.setAttribute('stroke', '#0ea5e9')
+    ball.setAttribute('stroke-width', '0.4')
+    ball.setAttribute('opacity', '0')
+    layer.appendChild(ball)
+    svg.appendChild(layer)
+  }
 }
 
 function updateHoleMarkerVisibility() {
   const el = mapContainer.value
   if (!el) return
+  tagLegacyMarkers()
   const markers = el.querySelectorAll<SVGGElement>('.hole-marker')
   const current = String(game.currentHole)
   markers.forEach((m) => {
@@ -170,13 +286,9 @@ function playBallArc(hole: number, scoreRelToPar: number | null) {
   const svg = mapContainer.value?.querySelector('svg') as SVGSVGElement | null
   if (!svg) return
   const ball = svg.querySelector('#ball-marker') as SVGCircleElement | null
-  const marker = currentMarkerEl(hole)
-  if (!ball || !marker) return
-  const teeX = Number(marker.dataset.teeX)
-  const teeY = Number(marker.dataset.teeY)
-  const greenX = Number(marker.dataset.greenX)
-  const greenY = Number(marker.dataset.greenY)
-  if (!isFinite(teeX) || !isFinite(teeY) || !isFinite(greenX) || !isFinite(greenY)) return
+  const coords = currentMarkerCoords(hole)
+  if (!ball || !coords) return
+  const { teeX, teeY, greenX, greenY } = coords
 
   // Fraction from tee to green based on score-to-par.
   // Par lands just short of the green; birdie past; bogey well short.
