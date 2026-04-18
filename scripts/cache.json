@@ -1,0 +1,50 @@
+{
+  "bethpage-black-farmingdale-ny": {
+    "content": {
+      "bullets": [
+        "Par 70",
+        "7230 yards",
+        "18 holes etched across 2 glasses"
+      ],
+      "description_html": "<p>A pint glass etched with the nine-hole front and back of Bethpage Black, Farmingdale, NY. Pour a beer and the line lands right where your score does.</p><p>Each set comes with two glasses \u2014 one for the front nine, one for the back. Track your round as you drink it.</p><p>Preorder now for the first run.</p>",
+      "headline": "Bethpage Black \u2014 your course, on a pint glass."
+    },
+    "gallery": [],
+    "generated_at": "2026-04-18T01:54:49.808578+00:00",
+    "hero_image": null,
+    "input_hash": "d3069816f5593d0eaf007aba22fc062c4586485d3bedb4b777aac97546a83e03",
+    "patio_image": null
+  },
+  "pebble-beach-golf-links-pebble-beach-ca": {
+    "content": {
+      "bullets": [
+        "Par 72",
+        "6316 yards",
+        "18 holes etched across 2 glasses"
+      ],
+      "description_html": "<p>A pint glass etched with the nine-hole front and back of Pebble Beach Golf Links, Pebble Beach, CA. Pour a beer and the line lands right where your score does.</p><p>Each set comes with two glasses \u2014 one for the front nine, one for the back. Track your round as you drink it.</p><p>Preorder now for the first run.</p>",
+      "headline": "Pebble Beach Golf Links \u2014 your course, on a pint glass."
+    },
+    "gallery": [],
+    "generated_at": "2026-04-18T01:54:49.797548+00:00",
+    "hero_image": null,
+    "input_hash": "0d79d6b3951189d72a37771c8f55a55b9849cc5546bb3cdd7d0cd18ada8b7793",
+    "patio_image": null
+  },
+  "st-andrews-old-course-st-andrews-fife": {
+    "content": {
+      "bullets": [
+        "Par 72",
+        "6671 yards",
+        "18 holes etched across 2 glasses"
+      ],
+      "description_html": "<p>A pint glass etched with the nine-hole front and back of St Andrews Old Course, St Andrews, Fife. Pour a beer and the line lands right where your score does.</p><p>Each set comes with two glasses \u2014 one for the front nine, one for the back. Track your round as you drink it.</p><p>Preorder now for the first run.</p>",
+      "headline": "St Andrews Old Course \u2014 your course, on a pint glass."
+    },
+    "gallery": [],
+    "generated_at": "2026-04-18T01:54:49.803066+00:00",
+    "hero_image": null,
+    "input_hash": "fa549a0f4877672822d0a5ad75e61b87542475504d61ade2053d78f2c483161d",
+    "patio_image": null
+  }
+}

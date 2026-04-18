@@ -1,0 +1,30 @@
+{
+  "slug": "st-andrews-old-course-st-andrews-fife",
+  "course_id": 9002,
+  "name": "St Andrews Old Course",
+  "club_name": "The Royal and Ancient",
+  "city": "St Andrews",
+  "state": "Fife",
+  "country": "GB",
+  "stats": {
+    "total_par": 72,
+    "total_yardage": 6671,
+    "tee_count": 1,
+    "holes": 18,
+    "signature_hole": 17,
+    "est_round_minutes": 216
+  },
+  "content": {
+    "headline": "St Andrews Old Course \u2014 your course, on a pint glass.",
+    "description_html": "<p>A pint glass etched with the nine-hole front and back of St Andrews Old Course, St Andrews, Fife. Pour a beer and the line lands right where your score does.</p><p>Each set comes with two glasses \u2014 one for the front nine, one for the back. Track your round as you drink it.</p><p>Preorder now for the first run.</p>",
+    "bullets": [
+      "Par 72",
+      "6671 yards",
+      "18 holes etched across 2 glasses"
+    ]
+  },
+  "glass3d_url": "/products/st-andrews-old-course-st-andrews-fife/glass-3d.json",
+  "hero_image": null,
+  "patio_image": null,
+  "gallery": []
+}

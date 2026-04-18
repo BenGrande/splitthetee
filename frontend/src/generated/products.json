@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "slug": "bethpage-black-farmingdale-ny",
+    "name": "Bethpage Black",
+    "club_name": "Bethpage State Park",
+    "city": "Farmingdale",
+    "state": "NY",
+    "country": "US",
+    "par": 70,
+    "yardage": 7230,
+    "hero_image": null
+  },
+  {
+    "slug": "pebble-beach-golf-links-pebble-beach-ca",
+    "name": "Pebble Beach Golf Links",
+    "club_name": "Pebble Beach",
+    "city": "Pebble Beach",
+    "state": "CA",
+    "country": "US",
+    "par": 72,
+    "yardage": 6316,
+    "hero_image": null
+  },
+  {
+    "slug": "st-andrews-old-course-st-andrews-fife",
+    "name": "St Andrews Old Course",
+    "club_name": "The Royal and Ancient",
+    "city": "St Andrews",
+    "state": "Fife",
+    "country": "GB",
+    "par": 72,
+    "yardage": 6671,
+    "hero_image": null
+  }
+]

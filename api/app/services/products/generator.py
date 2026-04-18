@@ -189,6 +189,9 @@ def build_glass3d(course: dict, glass_number: int = 1, glass_count: int = 2) -> 
 def _render_holes_for(course: dict) -> list[dict]:
     """Holes list normalized for layout/render: {number, par, yards, handicap}."""
     raw = course.get("render_holes") or course.get("holes") or []
+    if not raw:
+        tee = default_tee(course) or {}
+        raw = tee.get("holes") or []
     if raw and raw[0].get("yards") is not None:
         return raw
     normalized = []

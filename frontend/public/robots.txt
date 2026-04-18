@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /render/
+Disallow: /play/
+Sitemap: https://www.splitthetee.com/sitemap.xml

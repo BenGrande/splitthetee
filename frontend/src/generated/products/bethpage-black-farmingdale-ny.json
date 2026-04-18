@@ -1,0 +1,30 @@
+{
+  "slug": "bethpage-black-farmingdale-ny",
+  "course_id": 9003,
+  "name": "Bethpage Black",
+  "club_name": "Bethpage State Park",
+  "city": "Farmingdale",
+  "state": "NY",
+  "country": "US",
+  "stats": {
+    "total_par": 70,
+    "total_yardage": 7230,
+    "tee_count": 1,
+    "holes": 18,
+    "signature_hole": 5,
+    "est_round_minutes": 216
+  },
+  "content": {
+    "headline": "Bethpage Black \u2014 your course, on a pint glass.",
+    "description_html": "<p>A pint glass etched with the nine-hole front and back of Bethpage Black, Farmingdale, NY. Pour a beer and the line lands right where your score does.</p><p>Each set comes with two glasses \u2014 one for the front nine, one for the back. Track your round as you drink it.</p><p>Preorder now for the first run.</p>",
+    "bullets": [
+      "Par 70",
+      "7230 yards",
+      "18 holes etched across 2 glasses"
+    ]
+  },
+  "glass3d_url": "/products/bethpage-black-farmingdale-ny/glass-3d.json",
+  "hero_image": null,
+  "patio_image": null,
+  "gallery": []
+}
