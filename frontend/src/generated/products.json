@@ -8,7 +8,7 @@
     "country": "US",
     "par": 70,
     "yardage": 7230,
-    "hero_image": null
+    "hero_image": "/products/bethpage-black-farmingdale-ny/glass-preview.svg"
   },
   {
     "slug": "pebble-beach-golf-links-pebble-beach-ca",
@@ -19,7 +19,7 @@
     "country": "US",
     "par": 72,
     "yardage": 6316,
-    "hero_image": null
+    "hero_image": "/products/pebble-beach-golf-links-pebble-beach-ca/glass-preview.svg"
   },
   {
     "slug": "st-andrews-old-course-st-andrews-fife",
@@ -30,6 +30,6 @@
     "country": "GB",
     "par": 72,
     "yardage": 6671,
-    "hero_image": null
+    "hero_image": "/products/st-andrews-old-course-st-andrews-fife/glass-preview.svg"
   }
 ]

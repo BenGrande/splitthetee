@@ -141,13 +141,13 @@ useHead({
           :to="`/products/${p.slug}`"
           class="group block bg-white border border-emerald-100 rounded-2xl overflow-hidden hover:shadow-xl transition-shadow"
         >
-          <div class="aspect-square bg-emerald-50 flex items-center justify-center overflow-hidden">
+          <div class="aspect-square bg-white border-b border-emerald-100 flex items-center justify-center overflow-hidden p-4">
             <img
               v-if="p.hero_image"
               :src="p.hero_image"
               :alt="`${p.name} pint glass`"
               loading="lazy"
-              class="w-full h-full object-contain group-hover:scale-105 transition-transform"
+              class="max-w-full max-h-full object-contain group-hover:scale-[1.03] transition-transform"
             />
             <span v-else class="text-emerald-300 text-sm">Preview coming</span>
           </div>

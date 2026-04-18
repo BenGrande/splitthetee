@@ -24,7 +24,9 @@
     ]
   },
   "glass3d_url": "/products/bethpage-black-farmingdale-ny/glass-3d.json",
-  "hero_image": null,
+  "hero_image": "/products/bethpage-black-farmingdale-ny/glass-preview.svg",
   "patio_image": null,
-  "gallery": []
+  "gallery": [
+    "/products/bethpage-black-farmingdale-ny/glass-preview.svg"
+  ]
 }

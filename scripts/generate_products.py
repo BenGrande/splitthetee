@@ -124,13 +124,22 @@ def write_cache(cache: dict[str, Any]) -> None:
 # Glass3D + assets
 # ---------------------------------------------------------------------------
 
-def write_glass3d(slug: str, course: dict) -> str:
+def write_glass3d(slug: str, course: dict) -> tuple[str, str, list[int]]:
+    """Write glass-3d.json and a flat glass-preview.svg.
+
+    Returns (glass3d_url, svg_url, [svg_width, svg_height]).
+    """
     out_dir = PUBLIC_ROOT / "products" / slug
     out_dir.mkdir(parents=True, exist_ok=True)
     data = build_glass3d(course, glass_number=1, glass_count=2)
-    path = out_dir / "glass-3d.json"
-    path.write_text(json.dumps(data))
-    return f"/products/{slug}/glass-3d.json"
+    (out_dir / "glass-3d.json").write_text(json.dumps(data))
+    svg = data.get("wrap_svg") or ""
+    (out_dir / "glass-preview.svg").write_text(svg)
+    return (
+        f"/products/{slug}/glass-3d.json",
+        f"/products/{slug}/glass-preview.svg",
+        [900, 700],
+    )
 
 
 def playwright_capture(slug: str, preview_port: int = 4173) -> list[str]:
@@ -418,26 +427,30 @@ def process_course(
         print(f"[{slug}] stats failed: {exc}")
         return None
 
-    # Glass3D (cheap, reruns every time the course changes)
+    # Glass3D (cheap, reruns every time the course changes) + flat SVG preview
     glass3d_url = None
+    svg_preview = None
     try:
-        glass3d_url = write_glass3d(slug, course)
+        glass3d_url, svg_preview, _ = write_glass3d(slug, course)
     except Exception as exc:
         print(f"[{slug}] glass-3d failed: {exc}")
 
-    hero_image = None
+    hero_image = svg_preview
     patio_image = None
-    gallery: list[str] = []
+    gallery: list[str] = [svg_preview] if svg_preview else []
 
     if not dry_run and capture_images and (not unchanged or force):
-        gallery = playwright_capture(slug)
-        if gallery:
-            hero_image = gallery[0]
+        captured = playwright_capture(slug)
+        if captured:
+            hero_image = captured[0]
+            gallery = [*captured, *gallery]
         patio_image = compose_patio(slug)
-    elif cached.get("gallery"):
+    elif cached.get("hero_image"):
+        # Prefer the cached (Playwright) hero over the fresh SVG preview.
         hero_image = cached.get("hero_image")
         patio_image = cached.get("patio_image")
-        gallery = cached.get("gallery", [])
+        cached_gallery = cached.get("gallery") or []
+        gallery = [*cached_gallery, *(g for g in gallery if g not in cached_gallery)]
 
     # AI content (cached by input hash)
     content = None

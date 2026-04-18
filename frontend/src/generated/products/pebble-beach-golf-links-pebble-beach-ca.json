@@ -24,7 +24,9 @@
     ]
   },
   "glass3d_url": "/products/pebble-beach-golf-links-pebble-beach-ca/glass-3d.json",
-  "hero_image": null,
+  "hero_image": "/products/pebble-beach-golf-links-pebble-beach-ca/glass-preview.svg",
   "patio_image": null,
-  "gallery": []
+  "gallery": [
+    "/products/pebble-beach-golf-links-pebble-beach-ca/glass-preview.svg"
+  ]
 }

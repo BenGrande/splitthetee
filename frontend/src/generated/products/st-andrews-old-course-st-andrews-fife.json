@@ -24,7 +24,9 @@
     ]
   },
   "glass3d_url": "/products/st-andrews-old-course-st-andrews-fife/glass-3d.json",
-  "hero_image": null,
+  "hero_image": "/products/st-andrews-old-course-st-andrews-fife/glass-preview.svg",
   "patio_image": null,
-  "gallery": []
+  "gallery": [
+    "/products/st-andrews-old-course-st-andrews-fife/glass-preview.svg"
+  ]
 }

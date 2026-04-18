@@ -183,16 +183,14 @@ const prefillCourse = computed(() => {
 
     <main v-else-if="summary" class="max-w-6xl mx-auto px-6 py-8 grid md:grid-cols-2 gap-10">
       <div>
-        <div class="aspect-square bg-white border border-emerald-100 rounded-2xl overflow-hidden mb-4">
+        <div class="aspect-square bg-white border border-emerald-100 rounded-2xl overflow-hidden mb-4 flex items-center justify-center p-6">
           <img
             v-if="summary.hero_image"
             :src="summary.hero_image"
             :alt="`${summary.name} pint glass`"
-            class="w-full h-full object-contain"
+            class="max-w-full max-h-full object-contain"
           />
-          <div v-else class="w-full h-full flex items-center justify-center text-emerald-300">
-            Preview generating
-          </div>
+          <div v-else class="text-emerald-300 text-sm">Preview generating</div>
         </div>
         <div
           v-if="glass3dData"
