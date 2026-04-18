@@ -9,6 +9,32 @@ const selectedHole = ref<number | null>(null)
 const scoreFlash = ref<number | null>(null)
 const viewMode = ref<'map' | 'glass'>('map')
 const confirmNewGame = ref(false)
+const addingPlayer = ref(false)
+const newPlayerName = ref('')
+const addPlayerError = ref('')
+
+async function submitNewPlayer() {
+  const name = newPlayerName.value.trim()
+  if (!name) {
+    addPlayerError.value = 'Enter a name'
+    return
+  }
+  addPlayerError.value = ''
+  const ok = await game.addPlayer(name)
+  if (!ok) {
+    addPlayerError.value = 'Could not add player'
+    return
+  }
+  game.switchPlayer(game.localPlayers.length - 1)
+  newPlayerName.value = ''
+  addingPlayer.value = false
+}
+
+function cancelAddPlayer() {
+  addingPlayer.value = false
+  newPlayerName.value = ''
+  addPlayerError.value = ''
+}
 
 async function handleNewGame() {
   if (!confirmNewGame.value) {
@@ -265,8 +291,8 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <!-- Player Switcher (multi-player) -->
-    <div v-if="game.localPlayers.length > 1" class="flex items-center justify-center gap-1.5 px-4 py-2 shrink-0">
+    <!-- Player Switcher (with mid-game add) -->
+    <div class="flex flex-wrap items-center justify-center gap-1.5 px-4 py-2 shrink-0">
       <button
         v-for="(p, i) in game.localPlayers"
         :key="p.playerId"
@@ -278,7 +304,43 @@ onUnmounted(() => {
       >
         {{ p.playerName }}
       </button>
+
+      <button
+        v-if="!addingPlayer"
+        @click="addingPlayer = true"
+        aria-label="Add player"
+        class="px-2.5 py-1.5 rounded-full text-xs font-medium bg-emerald-900/60 text-emerald-300 border border-emerald-800/50 hover:bg-emerald-800/60 transition-all"
+      >
+        + Add player
+      </button>
+
+      <div v-else class="flex items-center gap-1.5">
+        <input
+          v-model="newPlayerName"
+          type="text"
+          placeholder="Player name"
+          autofocus
+          @keydown.enter="submitNewPlayer"
+          @keydown.esc="cancelAddPlayer"
+          class="px-3 py-1.5 rounded-full text-xs bg-emerald-900 border border-emerald-700 text-white placeholder-emerald-600 focus:outline-none focus:border-emerald-400"
+        />
+        <button
+          @click="submitNewPlayer"
+          :disabled="game.loading"
+          class="px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-all"
+        >
+          Add
+        </button>
+        <button
+          @click="cancelAddPlayer"
+          class="px-2 py-1.5 rounded-full text-xs text-emerald-500 hover:text-emerald-300 transition-colors"
+          aria-label="Cancel"
+        >
+          ✕
+        </button>
+      </div>
     </div>
+    <p v-if="addPlayerError" class="text-red-400 text-xs text-center -mt-1 mb-1 px-4">{{ addPlayerError }}</p>
 
     <!-- Map / Glass Toggle -->
     <div class="flex items-center justify-center py-2 shrink-0">
