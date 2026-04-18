@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
 import PreorderForm from '../components/PreorderForm.vue'
 
 const heroSrc = '/hero.jpg'
@@ -23,17 +22,13 @@ const steps = [
 <template>
   <div class="min-h-screen bg-emerald-950 text-white">
     <!-- Nav -->
-    <header class="absolute top-0 inset-x-0 z-30 px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <img src="/splitthetee.svg" alt="" class="h-8 w-8" />
-        <span class="text-lg font-bold tracking-tight">Split the Tee</span>
-      </div>
-      <RouterLink
-        to="/designer"
-        class="text-sm text-emerald-200 hover:text-white transition-colors"
-      >
-        Designer
-      </RouterLink>
+    <header class="absolute top-0 inset-x-0 z-30 px-6 py-4 flex items-center justify-center">
+      <img
+        src="/splitthetee.svg"
+        alt="Split the Tee"
+        class="h-12 sm:h-16 w-auto"
+        style="filter: brightness(0) invert(1)"
+      />
     </header>
 
     <!-- Hero -->
