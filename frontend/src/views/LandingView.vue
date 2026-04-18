@@ -2,6 +2,7 @@
 import PreorderForm from '../components/PreorderForm.vue'
 
 const heroSrc = '/hero.jpg'
+const showcaseSrc = '/showcase.jpg'
 
 const steps = [
   {
@@ -86,8 +87,8 @@ const steps = [
     <section class="px-6 py-20 bg-emerald-900/30 border-y border-emerald-800/40">
       <div class="max-w-5xl mx-auto grid md:grid-cols-2 gap-10 items-center">
         <img
-          :src="heroSrc"
-          alt="Pint glass etched with golf course layout, lime wedge on a wooden coaster"
+          :src="showcaseSrc"
+          alt="Pint glass etched with a single golf hole layout, half full of beer on a wooden table at sunrise"
           class="rounded-2xl shadow-2xl w-full h-auto object-cover aspect-[3/4]"
         />
         <div>
