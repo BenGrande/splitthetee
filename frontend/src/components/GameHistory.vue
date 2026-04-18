@@ -4,6 +4,19 @@ import { useGameStore } from '../stores/game'
 
 const game = useGameStore()
 const confirmDelete = ref<string | null>(null)
+const resuming = ref<string | null>(null)
+const resumeError = ref('')
+
+async function handleResume(sessionId: string) {
+  if (resuming.value) return
+  resuming.value = sessionId
+  resumeError.value = ''
+  const ok = await game.resumeGame(sessionId)
+  if (!ok) {
+    resumeError.value = 'Could not resume this game.'
+  }
+  resuming.value = null
+}
 
 onMounted(() => {
   game.fetchGameHistory()
@@ -66,16 +79,26 @@ function formatScore(total: number): string {
                 <span v-if="entry.active" class="text-emerald-400 ml-1">Active</span>
               </div>
             </div>
-            <button
-              @click="handleDelete(entry.session_id)"
-              class="px-3 py-1.5 rounded-lg text-xs transition-colors"
-              :class="confirmDelete === entry.session_id
-                ? 'bg-red-600 text-white hover:bg-red-500'
-                : 'bg-emerald-900/60 text-red-400 border border-red-900/50 hover:bg-red-900/30'"
-            >
-              {{ confirmDelete === entry.session_id ? 'Confirm?' : 'Delete' }}
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                @click="handleResume(entry.session_id)"
+                :disabled="resuming !== null"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors"
+              >
+                {{ resuming === entry.session_id ? 'Resuming...' : 'Resume' }}
+              </button>
+              <button
+                @click="handleDelete(entry.session_id)"
+                class="px-3 py-1.5 rounded-lg text-xs transition-colors"
+                :class="confirmDelete === entry.session_id
+                  ? 'bg-red-600 text-white hover:bg-red-500'
+                  : 'bg-emerald-900/60 text-red-400 border border-red-900/50 hover:bg-red-900/30'"
+              >
+                {{ confirmDelete === entry.session_id ? 'Confirm?' : 'Delete' }}
+              </button>
+            </div>
           </div>
+          <p v-if="resumeError && resuming === null" class="text-red-400 text-xs mb-2">{{ resumeError }}</p>
 
           <!-- Players & scores -->
           <div v-if="entry.players.length > 0" class="space-y-1">

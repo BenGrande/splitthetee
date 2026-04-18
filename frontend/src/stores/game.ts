@@ -436,6 +436,57 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  async function resumeGame(targetSessionId: string): Promise<boolean> {
+    loading.value = true
+    try {
+      const res = await fetch(`/api/v1/games/${targetSessionId}`)
+      if (!res.ok) return false
+      const session = await res.json()
+
+      const sessionPlayers: { player_id: string; player_name: string }[] = session.players || []
+      if (sessionPlayers.length === 0) return false
+
+      sessionId.value = session.id
+      glassSetId.value = session.glass_set_id || glassSetId.value
+      courseName.value = session.course_name || ''
+      glassCount.value = session.glass_count || 3
+      holesPerGlass.value = session.holes_per_glass || 6
+      holes.value = session.holes || []
+      courseMapSvg.value = session.course_map_svg || ''
+
+      const rebuilt: LocalPlayer[] = []
+      for (const p of sessionPlayers) {
+        const scoresByHole: Record<number, number> = {}
+        try {
+          const scoreRes = await fetch(`/api/v1/games/${targetSessionId}/scores/${p.player_id}`)
+          if (scoreRes.ok) {
+            const scoreData = await scoreRes.json()
+            for (const s of (scoreData.scores || [])) {
+              scoresByHole[s.hole_number] = s.score
+            }
+          }
+        } catch { /* continue with empty scores */ }
+        rebuilt.push({
+          playerId: p.player_id,
+          playerName: p.player_name,
+          scores: scoresByHole,
+        })
+      }
+
+      localPlayers.value = rebuilt
+      activePlayerIndex.value = 0
+      connected.value = true
+      view.value = 'scorecard'
+      saveToStorage()
+      startScorePolling()
+      return true
+    } catch {
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function fetchGameHistory() {
     if (!glassSetId.value) return
     try {
@@ -646,6 +697,7 @@ export const useGameStore = defineStore('game', () => {
     addPlayer,
     switchPlayer,
     reconnect,
+    resumeGame,
     submitScore,
     removeScore,
     fetchLeaderboard,
