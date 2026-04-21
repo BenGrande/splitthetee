@@ -233,6 +233,11 @@ def compose_patio(slug: str) -> str | None:
     out = PUBLIC_ROOT / "products" / slug / "patio.jpg"
     with Image.open(stock) as bg, Image.open(glass) as gl:
         bg = bg.convert("RGB")
+        # Crop the transparent PNG to its bounding box (remove empty space)
+        if gl.mode == "RGBA":
+            bbox = gl.getbbox()
+            if bbox:
+                gl = gl.crop(bbox)
         # size the glass to ~55% of the bg height
         target_h = int(bg.height * 0.55)
         ratio = target_h / gl.height

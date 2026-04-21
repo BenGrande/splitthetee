@@ -151,6 +151,16 @@ const prefillCourse = computed(() => {
     course_location: [summary.value.city, summary.value.state].filter(Boolean).join(', ') || null,
   }
 })
+
+const gallery = computed(() => detail.value?.gallery?.filter(Boolean) ?? [])
+const carouselIndex = ref(0)
+
+function nextSlide() {
+  if (gallery.value.length) carouselIndex.value = (carouselIndex.value + 1) % gallery.value.length
+}
+function prevSlide() {
+  if (gallery.value.length) carouselIndex.value = (carouselIndex.value - 1 + gallery.value.length) % gallery.value.length
+}
 </script>
 
 <template>
@@ -183,13 +193,46 @@ const prefillCourse = computed(() => {
 
     <main v-else-if="summary" class="max-w-6xl mx-auto px-6 py-8 grid md:grid-cols-2 gap-10">
       <div>
-        <div class="aspect-square bg-white border border-emerald-100 rounded-2xl overflow-hidden mb-4 flex items-center justify-center p-6">
-          <img
-            v-if="summary.hero_image"
-            :src="summary.hero_image"
-            :alt="`${summary.name} pint glass`"
-            class="max-w-full max-h-full object-contain"
-          />
+        <div class="relative aspect-square bg-white border border-emerald-100 rounded-2xl overflow-hidden mb-4 flex items-center justify-center p-6">
+          <template v-if="gallery.length">
+            <img
+              :src="gallery[carouselIndex]"
+              :alt="`${summary.name} pint glass — image ${carouselIndex + 1}`"
+              class="max-w-full max-h-full object-contain"
+            />
+            <button
+              v-if="gallery.length > 1"
+              @click="prevSlide"
+              class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 border border-emerald-200 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 transition-colors"
+              aria-label="Previous image"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <button
+              v-if="gallery.length > 1"
+              @click="nextSlide"
+              class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 border border-emerald-200 flex items-center justify-center text-emerald-700 hover:bg-emerald-50 transition-colors"
+              aria-label="Next image"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </button>
+            <div v-if="gallery.length > 1" class="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+              <button
+                v-for="(_, i) in gallery"
+                :key="i"
+                @click="carouselIndex = i"
+                :class="['w-2 h-2 rounded-full transition-colors', i === carouselIndex ? 'bg-emerald-600' : 'bg-emerald-200']"
+                :aria-label="`View image ${i + 1}`"
+              />
+            </div>
+          </template>
+          <template v-else-if="summary.hero_image">
+            <img
+              :src="summary.hero_image"
+              :alt="`${summary.name} pint glass`"
+              class="max-w-full max-h-full object-contain"
+            />
+          </template>
           <div v-else class="text-emerald-300 text-sm">Preview generating</div>
         </div>
         <div
