@@ -113,6 +113,9 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
     _rescale_to_fill(positioned, draw_left, draw_top, draw_width, draw_height)
     _pack_holes(positioned)
     _enforce_slope(positioned)
+    # Re-enforce after packing — packing can pull a later tee back above the
+    # earlier green if feature coverage is uneven.
+    _enforce_green_tee_gap(positioned)
     _rescale_to_fill(positioned, draw_left, draw_top, draw_width, draw_height)
 
     return {
@@ -483,7 +486,9 @@ def _rescale_to_fill(holes, draw_left, draw_top, draw_width, draw_height):
 
 
 def _enforce_green_tee_gap(holes, min_gap: float = 2):
-    """Ensure adequate gap between upper hole's green and lower hole's tee."""
+    """Ensure the next hole's tee sits strictly below the previous hole's
+    green. Uses the spine end_y as a floor (covers holes with no tagged
+    green polygon) and picks up tee polygons that extend above start_y."""
     if len(holes) < 2:
         return
 
@@ -491,14 +496,16 @@ def _enforce_green_tee_gap(holes, min_gap: float = 2):
         prev = holes[i - 1]
         curr = holes[i]
 
-        # Find lowest Y of previous hole's green features
+        # Prev green bottom: spine end_y as floor, then push past any green
+        # or rough polygon (rough tends to wrap the green).
         prev_green_bottom = prev["end_y"]
         for f in prev["features"]:
-            if f.get("category") == "green":
+            if f.get("category") in ("green", "rough"):
                 for _, y in f["coords"]:
                     prev_green_bottom = max(prev_green_bottom, y)
 
-        # Find highest Y of current hole's tee features
+        # Curr tee top: spine start_y as ceiling, then pull up past any tee
+        # polygon point.
         curr_tee_top = curr["start_y"]
         for f in curr["features"]:
             if f.get("category") == "tee":
@@ -549,7 +556,13 @@ def _fix_overlaps(holes):
 
 
 def _pack_holes(holes):
-    """Pack holes tight by removing excess vertical gaps."""
+    """Pack holes tight by removing excess vertical gaps.
+
+    Uses end_y as a floor for prev_bottom so that a hole with no green
+    polygon still counts its spine terminus (= logical green position);
+    otherwise packing can pull the next hole's tee above the previous
+    hole's green.
+    """
     if len(holes) < 2:
         return
     target_gap = 5
@@ -558,12 +571,12 @@ def _pack_holes(holes):
         prev = holes[i - 1]
         curr = holes[i]
 
-        prev_bottom = prev["start_y"] + 14
+        prev_bottom = max(prev["end_y"], prev["start_y"] + 14)
         for f in prev["features"]:
             for _, y in f["coords"]:
                 prev_bottom = max(prev_bottom, y)
 
-        curr_top = curr["start_y"] - 2
+        curr_top = min(curr["start_y"] - 2, curr["end_y"])
         for f in curr["features"]:
             for _, y in f["coords"]:
                 curr_top = min(curr_top, y)

@@ -6,7 +6,7 @@ import math
 # Colors matching real aerial/satellite map aesthetics
 CATEGORY_STYLES = {
     "course_boundary": {"fill": "#3d6b3d", "stroke": "none", "opacity": 0.15},
-    "rough":           {"fill": "#6b8e5a", "stroke": "none", "opacity": 0.5},
+    "rough":           {"fill": "#1f4a2b", "stroke": "none", "opacity": 1.0},
     "fairway":         {"fill": "#5aad47", "stroke": "#4a9a3a", "opacity": 0.85},
     "green":           {"fill": "#4ecc3e", "stroke": "#3aaa2e", "opacity": 0.95},
     "tee":             {"fill": "#6bc95c", "stroke": "#52a846", "opacity": 0.9},
@@ -237,26 +237,6 @@ def render_course_map_svg(
         if yds:
             parts.append(f'data-yards="{yds}"')
         return " ".join(parts)
-
-    # ── Render per-hole tee badges (only ref-matched tees; unmatched tees
-    # stay as anonymous green polygons so they still read as tee boxes.)
-    for hl in hole_labels:
-        tee = hl.get("tee_pos")
-        if not tee:
-            continue
-        tx, ty = tee
-        svg += f'<g {_marker_attrs(hl)}>'
-        svg += (
-            f'<circle cx="{_ff(tx)}" cy="{_ff(ty)}" r="2.2" '
-            f'fill="white" stroke="rgba(0,0,0,0.5)" stroke-width="0.25"/>'
-        )
-        svg += (
-            f'<text x="{_ff(tx)}" y="{_ff(ty + 0.75)}" '
-            f'text-anchor="middle" dominant-baseline="middle" '
-            f'font-size="2.4" font-family="Arial,sans-serif" '
-            f'fill="black" font-weight="bold">{hl["ref"]}</text>'
-        )
-        svg += '</g>'
 
     # ── Render green hole-number circles ──
     for hl in hole_labels:

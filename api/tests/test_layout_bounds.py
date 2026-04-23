@@ -85,6 +85,23 @@ def test_green_zone_clamped_when_polygon_is_large():
     assert span >= 8.0 - 1e-6, span
 
 
+def test_next_tee_never_above_previous_green():
+    """Holes with no tagged green polygon used to get packed up to the wrong
+    spot, so the next hole's tee ended up visually above the prior green."""
+    holes = [
+        {"ref": 1, "par": 4, "yardage": 400, "handicap": 1, "features": []},
+        {"ref": 2, "par": 5, "yardage": 550, "handicap": 2, "features": []},
+        {"ref": 3, "par": 3, "yardage": 150, "handicap": 3, "features": []},
+        {"ref": 4, "par": 4, "yardage": 420, "handicap": 4, "features": []},
+    ]
+    layout = compute_layout(holes, {"canvas_width": 900, "canvas_height": 700})
+    positioned = layout["holes"]
+    for prev, curr in zip(positioned, positioned[1:]):
+        # Curr tee top must sit at or below prev green bottom (with a small
+        # gap tolerance).
+        assert curr["start_y"] >= prev["end_y"] - 1e-6, (prev, curr)
+
+
 def test_short_course_does_not_overfill():
     """Three par-3s shouldn't be force-stretched to span the whole canvas
     at crazy proportions — the rescale target is 'fill the draw area', so
