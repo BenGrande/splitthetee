@@ -5,7 +5,9 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.v1.holes import get_course_holes
 from app.services.game import generate_qr_svg, get_or_create_glass_set
+from app.services.golf.osm import fetch_course_map
 from app.services.render.layout import compute_layout, split_into_glasses
 from app.services.render.svg import render_svg
 from app.services.render.scoring import compute_all_scoring_zones, compute_all_terrain_following_zones
@@ -151,6 +153,106 @@ def _build_layout_and_zones(holes, options):
         layout = warp_layout(layout, template, options.get("padding"))
 
     return layout, zones_by_hole, terrain_zones, template
+
+
+@router.get("/render/debug")
+async def render_debug(
+    courseId: str,
+    lat: float | None = None,
+    lng: float | None = None,
+    glass_count: int = 2,
+    current_glass: int = 0,
+):
+    """Dump the raw course-holes response, the stats the renderer builds, and a
+    layout summary for the selected glass so we can see why a specific course
+    looks broken without eyeballing the SVG output.
+
+    Returns a JSON blob designed to be pasted into chat for triage.
+    """
+    course_payload = await get_course_holes(courseId=courseId, lat=lat, lng=lng)
+    holes = course_payload.get("holes") or []
+    center = course_payload.get("center")
+    course_name = course_payload.get("course_name") or ""
+
+    # Holes the /render endpoint would split by glass_count / current_glass.
+    groups = split_into_glasses(holes, glass_count) if holes else []
+    selected_holes = groups[current_glass] if 0 <= current_glass < len(groups) else holes
+
+    hole_stats = _build_hole_stats(selected_holes)
+
+    layout_summary: list[dict] = []
+    layout_error: str | None = None
+    try:
+        layout = compute_layout(selected_holes, {"canvas_width": 900, "canvas_height": 700})
+        for h in layout.get("holes", []):
+            sx = h.get("start_x")
+            sy = h.get("start_y")
+            ex = h.get("end_x")
+            ey = h.get("end_y")
+            layout_summary.append({
+                "ref": h.get("ref"),
+                "par": h.get("par"),
+                "yardage": h.get("yardage"),
+                "start": [sx, sy],
+                "end": [ex, ey],
+                "length": h.get("length"),
+                "width": h.get("width"),
+                "feature_count": len(h.get("features") or []),
+            })
+    except Exception as exc:  # pragma: no cover - diagnostic only
+        layout_error = f"{type(exc).__name__}: {exc}"
+
+    # OSM feature counts by category for the overhead course map.
+    osm_categories: dict[str, int] = {}
+    osm_error: str | None = None
+    osm_feature_count = 0
+    if lat and lng:
+        try:
+            map_data = await fetch_course_map(lat, lng)
+            osm_features = map_data.get("features") or []
+            osm_feature_count = len(osm_features)
+            for f in osm_features:
+                c = f.get("category", "?")
+                osm_categories[c] = osm_categories.get(c, 0) + 1
+        except Exception as exc:  # pragma: no cover - diagnostic only
+            osm_error = f"{type(exc).__name__}: {exc}"
+
+    hole_summary = [
+        {
+            "ref": h.get("ref"),
+            "number": h.get("number"),
+            "par": h.get("par"),
+            "yardage": h.get("yardage") or h.get("yards"),
+            "handicap": h.get("handicap"),
+            "features": len(h.get("features") or []),
+        }
+        for h in holes
+    ]
+
+    return {
+        "course": {
+            "course_id": courseId,
+            "course_name": course_name,
+            "center": center,
+            "lat": lat,
+            "lng": lng,
+            "hole_count": len(holes),
+        },
+        "holes": hole_summary,
+        "split": {
+            "glass_count": glass_count,
+            "current_glass": current_glass,
+            "glasses": [[h.get("ref") for h in g] for g in groups],
+            "selected_count": len(selected_holes),
+        },
+        "hole_stats_keys": sorted(hole_stats.keys()) if hole_stats else [],
+        "hole_stats_sample": next(iter(hole_stats.values()), None),
+        "layout_summary": layout_summary,
+        "layout_error": layout_error,
+        "osm_feature_count": osm_feature_count,
+        "osm_categories": osm_categories,
+        "osm_error": osm_error,
+    }
 
 
 @router.post("/render")
