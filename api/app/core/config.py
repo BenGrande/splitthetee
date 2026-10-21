@@ -17,9 +17,13 @@ class Settings(BaseSettings):
     GOLF_API_BASE: str = "https://api.golfcourseapi.com/v1"
 
     # Overpass API endpoints (OSM)
+    # Ordered by observed reliability; query_overpass hedges across them.
     OVERPASS_ENDPOINTS: list[str] = [
-        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.openstreetmap.fr/api/interpreter",
         "https://overpass-api.de/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     ]
 
     # Auth

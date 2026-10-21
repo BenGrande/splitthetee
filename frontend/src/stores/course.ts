@@ -28,11 +28,20 @@ export const useCourseStore = defineStore('course', () => {
       let url = `/api/v1/course-holes?courseId=${course.id}`
       if (lat != null && lng != null) url += `&lat=${lat}&lng=${lng}`
       const res = await fetch(url)
+      if (!res.ok) {
+        throw new Error(`Course data request failed (HTTP ${res.status})`)
+      }
       const data = await res.json()
+      if (!Array.isArray(data.holes) || data.holes.length === 0) {
+        throw new Error('No hole data found for this course')
+      }
       // Normalize snake_case API response to camelCase for frontend
       data.courseName = data.course_name || data.courseName || course.course_name
       data.fontHint = data.font_hint || null
       courseData.value = data
+    } catch (err) {
+      courseData.value = null
+      throw err
     } finally {
       loading.value = false
     }

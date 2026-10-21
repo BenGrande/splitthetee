@@ -48,7 +48,14 @@ async function selectSearchCourse(course: any) {
   courseSearchResults.value = []
   showHeaderResults.value = false
   courseSearchQuery.value = course.course_name
-  await courseStore.loadCourse(course)
+  designer.statusMessage = `Loading ${course.course_name}...`
+  try {
+    await courseStore.loadCourse(course)
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'unknown error'
+    designer.statusMessage = `Could not load course data — ${detail}. Try again in a moment.`
+    return
+  }
   designer.applyFontHint(courseStore.courseData)
   triggerRender()
 

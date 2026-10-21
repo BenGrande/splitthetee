@@ -1,5 +1,6 @@
 """Tests for OSM service."""
 
+import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
@@ -145,3 +146,91 @@ class TestFetchCourseMap:
         # Verify the query uses 3000 (capped), not 5000
         call_args = mock_qo.call_args[0][0]
         assert "around:3000" in call_args
+
+
+class TestQueryOverpass:
+    """Hedged multi-mirror behaviour of query_overpass."""
+
+    @staticmethod
+    def _patch_post(side_effect):
+        return patch("app.services.golf.osm._post_overpass", side_effect=side_effect)
+
+    @pytest.mark.asyncio
+    async def test_first_mirror_success(self, monkeypatch):
+        from app.services.golf import osm
+        monkeypatch.setattr(osm.settings, "OVERPASS_ENDPOINTS", ["a", "b"])
+
+        async def fake(client, endpoint, query):
+            return {"elements": [endpoint]}
+
+        with self._patch_post(fake) as mock_post:
+            result = await osm.query_overpass("q")
+
+        assert result == {"elements": ["a"]}
+        assert mock_post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_hung_mirror_is_hedged(self, monkeypatch):
+        from app.services.golf import osm
+        monkeypatch.setattr(osm.settings, "OVERPASS_ENDPOINTS", ["hung", "good"])
+        monkeypatch.setattr(osm, "OVERPASS_STAGGER", 0.05)
+        monkeypatch.setattr(osm, "OVERPASS_TOTAL_DEADLINE", 5.0)
+
+        async def fake(client, endpoint, query):
+            if endpoint == "hung":
+                await asyncio.sleep(60)
+            return {"elements": [endpoint]}
+
+        with self._patch_post(fake):
+            result = await osm.query_overpass("q")
+
+        assert result == {"elements": ["good"]}
+
+    @pytest.mark.asyncio
+    async def test_failed_mirror_falls_through_immediately(self, monkeypatch):
+        from app.services.golf import osm
+        monkeypatch.setattr(osm.settings, "OVERPASS_ENDPOINTS", ["bad", "good"])
+        monkeypatch.setattr(osm, "OVERPASS_STAGGER", 30.0)
+        monkeypatch.setattr(osm, "OVERPASS_TOTAL_DEADLINE", 5.0)
+
+        async def fake(client, endpoint, query):
+            return None if endpoint == "bad" else {"elements": [endpoint]}
+
+        with self._patch_post(fake):
+            result = await osm.query_overpass("q")
+
+        assert result == {"elements": ["good"]}
+
+    @pytest.mark.asyncio
+    async def test_all_mirrors_hang_respects_deadline(self, monkeypatch):
+        from app.services.golf import osm
+        monkeypatch.setattr(osm.settings, "OVERPASS_ENDPOINTS", ["a", "b"])
+        monkeypatch.setattr(osm, "OVERPASS_STAGGER", 0.05)
+        monkeypatch.setattr(osm, "OVERPASS_TOTAL_DEADLINE", 0.3)
+
+        async def fake(client, endpoint, query):
+            await asyncio.sleep(60)
+            return {"elements": []}
+
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        with self._patch_post(fake):
+            result = await osm.query_overpass("q")
+        elapsed = loop.time() - start
+
+        assert result is None
+        assert elapsed < 2.0
+
+    @pytest.mark.asyncio
+    async def test_all_mirrors_fail_returns_none(self, monkeypatch):
+        from app.services.golf import osm
+        monkeypatch.setattr(osm.settings, "OVERPASS_ENDPOINTS", ["a", "b", "c"])
+
+        async def fake(client, endpoint, query):
+            return None
+
+        with self._patch_post(fake) as mock_post:
+            result = await osm.query_overpass("q")
+
+        assert result is None
+        assert mock_post.call_count == 3
