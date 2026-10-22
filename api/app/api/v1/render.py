@@ -136,6 +136,10 @@ def _build_layout_and_zones(holes, options):
     }
     if options.get("layout"):
         layout_opts["layout"] = options["layout"]
+    if options.get("featured_layout"):
+        layout_opts["featured_layout"] = True
+    if "synthesize_fairways" in options:
+        layout_opts["synthesize_fairways"] = bool(options["synthesize_fairways"])
     layout = compute_layout(holes, layout_opts)
     zone_ratios = options.get("zone_ratios")
     zones_by_hole = compute_all_scoring_zones(layout, zone_ratios)

@@ -62,12 +62,21 @@ async function selectSearchCourse(course: any) {
   // Persist course in URL so it survives page reload
   router.replace({
     query: {
+      ...route.query,
       lat: course.location?.latitude,
       lng: course.location?.longitude,
       courseId: course.id,
     },
   })
 }
+
+// Keep the featured-hole pick in the URL so the design can be shared
+watch(() => designer.featuredHoles, (refs) => {
+  const query = { ...route.query } as Record<string, any>
+  if (refs.length) query.holes = refs.join(',')
+  else delete query.holes
+  router.replace({ query })
+})
 
 // Debounced render
 let renderTimeout: ReturnType<typeof setTimeout> | null = null
@@ -100,6 +109,7 @@ watch(
     designer.logoDataUrl,
     designer.twoColumnLayout,
     designer.courseNameBanner,
+    designer.featuredHoles,
   ],
   () => {
     if (courseStore.courseData) triggerRender()
@@ -117,6 +127,14 @@ onMounted(async () => {
   if (savedGlassSetId) {
     designer.glassSetId = savedGlassSetId
   }
+  // Shareable featured-hole links: ?holes=1,7,16,17,18&glasses=1
+  const holesParam = route.query.holes as string
+  if (holesParam) {
+    const refs = holesParam.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0)
+    if (refs.length) designer.featuredHoles = [...new Set(refs)].sort((a, b) => a - b)
+  }
+  const glassesParam = Number(route.query.glasses)
+  if ([1, 2, 3, 6].includes(glassesParam)) designer.glassCount = glassesParam
   if (courseId) {
     try {
       let url = `/api/v1/course-holes?courseId=${courseId}`

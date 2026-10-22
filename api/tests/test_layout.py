@@ -1,5 +1,7 @@
 """Tests for layout engine."""
 
+import math
+
 from app.services.render.layout import (
     compute_layout,
     split_into_glasses,
@@ -167,3 +169,130 @@ class TestSplitIntoGlasses:
         holes = list(range(3))
         groups = split_into_glasses(holes, 3)
         assert len(groups) == 1  # n <= 3 returns single group
+
+
+# ---------------------------------------------------------------------------
+# Synthetic corridors + featured layout
+# ---------------------------------------------------------------------------
+from app.services.render.layout import (  # noqa: E402
+    synthesize_missing_features,
+    _route_coverage,
+    _simulate_featured,
+)
+
+
+def _sparse_hole(ref, par=4, yardage=420, extra_features=None):
+    """A hole mapped like many real courses: tee, green, bunker, no fairway."""
+    # ~400 m dogleg running roughly south-west
+    route = [[51.0300, -114.0000], [51.0280, -114.0015], [51.0268, -114.0030]]
+    feats = [
+        {"id": "t", "category": "tee", "ref": None, "par": None, "name": None,
+         "coords": [[51.0301, -114.0001], [51.0301, -113.9999], [51.0300, -113.9999]]},
+        {"id": "g", "category": "green", "ref": None, "par": None, "name": None,
+         "coords": [[51.0269, -114.0031], [51.0269, -114.0029], [51.0267, -114.0029]]},
+        {"id": "b", "category": "bunker", "ref": None, "par": None, "name": None,
+         "coords": [[51.0271, -114.0028], [51.0271, -114.0027]]},
+    ]
+    return {"ref": ref, "par": par, "yardage": yardage, "difficulty": 5.0, "handicap": 5,
+            "route_coords": route, "features": feats + (extra_features or [])}
+
+
+class TestSynthesizeMissingFeatures:
+    def test_adds_fairway_and_rough_when_missing(self):
+        out = synthesize_missing_features(_sparse_hole(1))
+        cats = [f["category"] for f in out["features"]]
+        assert cats[:2] == ["rough", "fairway"]  # ground first, mapped features on top
+        assert cats.count("fairway") == 1 and cats.count("rough") == 1
+        fw = next(f for f in out["features"] if f["category"] == "fairway")
+        assert fw["synthetic"] is True
+        assert len(fw["coords"]) > 10
+        assert fw["coords"][0] == fw["coords"][-1]  # closed ring
+
+    def test_corridor_follows_route(self):
+        hole = _sparse_hole(1)
+        out = synthesize_missing_features(hole)
+        fw = next(f for f in out["features"] if f["category"] == "fairway")
+        mid_lat = 51.0284
+        cos_lat = math.cos(math.radians(mid_lat))
+        assert _route_coverage(fw["coords"], hole["route_coords"], cos_lat, max_dist_m=40) == 1.0
+
+    def test_par3_is_narrower(self):
+        def width(par):
+            out = synthesize_missing_features(_sparse_hole(1, par=par))
+            fw = next(f for f in out["features"] if f["category"] == "fairway")
+            lons = [c[1] for c in fw["coords"]]
+            return max(lons) - min(lons)
+        assert width(3) < width(4) <= width(5)
+
+    def test_real_fairway_is_kept_untouched(self):
+        real = {"id": "f", "category": "fairway", "ref": None, "par": None, "name": None,
+                "coords": [[51.0296, -114.0003], [51.0290, -114.0008], [51.0282, -114.0014],
+                           [51.0275, -114.0022], [51.0272, -114.0026], [51.0296, -114.0003]]}
+        hole = _sparse_hole(1, extra_features=[real])
+        out = synthesize_missing_features(hole)
+        assert out is hole
+
+    def test_off_route_fairway_is_dropped_and_replaced(self):
+        # A driving range 300 m east of the hole that got associated by proximity.
+        junk = {"id": "range", "category": "fairway", "ref": None, "par": None, "name": None,
+                "coords": [[51.0300, -113.9950], [51.0300, -113.9940], [51.0280, -113.9940],
+                           [51.0280, -113.9950], [51.0300, -113.9950]]}
+        out = synthesize_missing_features(_sparse_hole(1, extra_features=[junk]))
+        fairways = [f for f in out["features"] if f["category"] == "fairway"]
+        assert len(fairways) == 1 and fairways[0].get("synthetic") is True
+
+    def test_no_route_returns_input(self):
+        hole = _sparse_hole(1)
+        hole["route_coords"] = []
+        assert synthesize_missing_features(hole) is hole
+
+
+class TestRouteCoverage:
+    def test_points_on_route_are_covered(self):
+        route = [[51.0, -114.0], [51.001, -114.0]]
+        cos_lat = math.cos(math.radians(51.0))
+        assert _route_coverage([[51.0005, -114.0]], route, cos_lat) == 1.0
+
+    def test_far_points_are_not(self):
+        route = [[51.0, -114.0], [51.001, -114.0]]
+        cos_lat = math.cos(math.radians(51.0))
+        assert _route_coverage([[51.0005, -114.01]], route, cos_lat) == 0.0
+
+
+class TestFeaturedLayout:
+    def test_alternates_direction_and_starts_at_edges(self):
+        hl = [{"length_fraction": 0.2, "angle_rad": math.radians(20)} for _ in range(4)]
+        pos = _simulate_featured(hl, 0.02)
+        assert [p["direction"] for p in pos] == [1, -1, 1, -1]
+        assert pos[0]["start_x"] == 0.06 and pos[1]["start_x"] == 0.94
+        assert pos[0]["end_x"] > 0.9  # equal lengths -> full sweep
+        assert all(pos[i]["start_y"] > pos[i - 1]["end_y"] for i in range(1, 4))
+
+    def test_shorter_hole_sweeps_less(self):
+        hl = [{"length_fraction": 0.3, "angle_rad": math.radians(20)},
+              {"length_fraction": 0.1, "angle_rad": math.radians(20)}]
+        pos = _simulate_featured(hl, 0.02)
+        assert abs(pos[1]["end_x"] - pos[1]["start_x"]) < abs(pos[0]["end_x"] - pos[0]["start_x"])
+
+    def test_compute_layout_featured_fills_width(self):
+        holes = [_sparse_hole(i, par=p, yardage=y)
+                 for i, (p, y) in enumerate([(4, 426), (3, 202), (4, 483), (3, 198), (5, 514)], 1)]
+        lay = compute_layout(holes, {"featured_layout": True})
+        draw = lay["draw_area"]
+        width = draw["right"] - draw["left"]
+        for h in lay["holes"]:
+            xs = [c[0] for f in h["features"] for c in f["coords"]]
+            # features (not just the spine) span at least half the draw width
+            assert max(xs) - min(xs) > 0.5 * width
+            assert all(f["category"] != "rough" or len(f["coords"]) > 10 for f in h["features"])
+
+    def test_featured_ignored_for_many_holes(self):
+        holes = [_sparse_hole(i) for i in range(1, 12)]
+        a = compute_layout(holes, {"featured_layout": True})
+        b = compute_layout(holes, {})
+        assert [round(h["start_x"]) for h in a["holes"]] == [round(h["start_x"]) for h in b["holes"]]
+
+    def test_synthesis_can_be_disabled(self):
+        lay = compute_layout([_sparse_hole(1)], {"synthesize_fairways": False})
+        cats = {f["category"] for f in lay["holes"][0]["features"]}
+        assert "fairway" not in cats

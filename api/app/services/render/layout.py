@@ -24,6 +24,9 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
     if not holes:
         return {"holes": [], "canvas_width": canvas_width, "canvas_height": canvas_height}
 
+    if opts.get("synthesize_fairways", True):
+        holes = [synthesize_missing_features(h) for h in holes]
+
     draw_left = text_margin + stats_margin
     draw_right = canvas_width - margin_x - ruler_margin
     draw_top = margin_y
@@ -35,6 +38,14 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
     total_yardage = sum(h.get("yardage") or 350 for h in holes)
     min_angle = 35
     max_angle = 55
+
+    # Featured layout: a handful of hand-picked holes drawn big. Flatter
+    # angles let each hole run most of the glass width, and length is only
+    # half-weighted by yardage so a par 3 still reads as a full hole.
+    featured = bool(opts.get("featured_layout")) and len(holes) <= 8
+    if featured:
+        min_angle = 16
+        max_angle = 28
 
     difficulties = [h.get("difficulty") or 9 for h in holes]
     min_diff = min(difficulties)
@@ -49,6 +60,8 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
         angle_rad = angle_deg * math.pi / 180
         yardage = hole.get("yardage") or 350
         length_fraction = yardage / total_yardage
+        if featured:
+            length_fraction = 0.5 * length_fraction + 0.5 / len(holes)
         hole_layouts.append({
             "hole": hole,
             "angle_deg": angle_deg,
@@ -66,8 +79,12 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
             max_hole_width, hole_padding,
         )
 
-    # Simulate zigzag
-    raw_positions = _simulate_zigzag(hole_layouts, hole_padding)
+    # Simulate zigzag (featured: reverse direction on every hole so each
+    # one sweeps the full width instead of stair-stepping down the glass)
+    if featured:
+        raw_positions = _simulate_featured(hole_layouts, hole_padding)
+    else:
+        raw_positions = _simulate_zigzag(hole_layouts, hole_padding)
 
     # Scale to fit canvas
     total_vertical = raw_positions[-1]["end_y"]
@@ -89,6 +106,10 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
         end_x = map_x(rp["end_x"])
         end_y = draw_top + rp["end_y"] * scale_factor
         length = rp["raw_length"] * scale_factor
+        if featured:
+            # x and y are scaled independently above; use the real spine
+            # length so the width clamp does not shrink the features.
+            length = math.hypot(end_x - start_x, end_y - start_y)
         max_width = length * max_hole_width
 
         features = _transform_hole_features(
@@ -111,15 +132,17 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
             "features": features,
         })
 
-    # Post-processing
-    _fix_overlaps(positioned)
-    _enforce_green_tee_gap(positioned)
+    # Post-processing. Featured holes get breathing room between them so
+    # the big corridors never touch once the glass warp squeezes them.
+    gap = draw_height * 0.035 if featured else 5
+    _fix_overlaps(positioned, min_gap=gap)
+    _enforce_green_tee_gap(positioned, min_gap=gap if featured else 2)
     _rescale_to_fill(positioned, draw_left, draw_top, draw_width, draw_height)
-    _pack_holes(positioned)
+    _pack_holes(positioned, target_gap=gap)
     _enforce_slope(positioned)
     # Re-enforce after packing — packing can pull a later tee back above the
     # earlier green if feature coverage is uneven.
-    _enforce_green_tee_gap(positioned)
+    _enforce_green_tee_gap(positioned, min_gap=gap if featured else 2)
     _rescale_to_fill(positioned, draw_left, draw_top, draw_width, draw_height)
 
     return {
@@ -133,6 +156,172 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
             "bottom": draw_bottom,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Synthetic features for sparsely mapped courses
+# ---------------------------------------------------------------------------
+_METERS_PER_DEG_LAT = 111_320.0
+
+
+def _offset_polyline(route: list[list[float]], half_width_m: float, cos_lat: float,
+                     start_m: float, end_m: float, taper_m: float) -> list[list[float]]:
+    """Build a closed polygon (lat, lon) around a centerline.
+
+    The corridor starts ``start_m`` metres from the first point and stops
+    ``end_m`` metres short of the last one. Width ramps up over ``taper_m``
+    at the start and down again at the end so the ends are rounded rather
+    than square. Returns [] when the corridor would be degenerate.
+    """
+    if len(route) < 2 or half_width_m <= 0:
+        return []
+
+    # Work in local metres with the first point as origin.
+    lat0, lon0 = route[0]
+    pts = [((lon - lon0) * cos_lat * _METERS_PER_DEG_LAT,
+            (lat - lat0) * _METERS_PER_DEG_LAT) for lat, lon in route]
+
+    # Cumulative arc length and per-vertex tangents.
+    seg_len = []
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        seg_len.append(math.hypot(x1 - x0, y1 - y0))
+    total = sum(seg_len)
+    if total <= start_m + end_m + 1.0:
+        return []
+
+    def point_at(d: float) -> tuple[float, float, float, float]:
+        """Position and unit tangent at arc distance d."""
+        acc = 0.0
+        for i, L in enumerate(seg_len):
+            if L == 0:
+                continue
+            if d <= acc + L or i == len(seg_len) - 1:
+                t = max(0.0, min(1.0, (d - acc) / L))
+                (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+                return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t,
+                        (x1 - x0) / L, (y1 - y0) / L)
+            acc += L
+        x, y = pts[-1]
+        return x, y, 1.0, 0.0
+
+    usable = total - start_m - end_m
+    taper = min(taper_m, usable / 2.5)
+    samples = max(8, int(usable / 12.0))
+    left: list[tuple[float, float]] = []
+    right: list[tuple[float, float]] = []
+    for k in range(samples + 1):
+        d_local = usable * k / samples
+        x, y, tx, ty = point_at(start_m + d_local)
+        # Rounded-ish ends: width follows a quarter-circle profile in the taper.
+        if taper > 0 and d_local < taper:
+            u = d_local / taper
+            w = half_width_m * math.sqrt(max(0.0, 1 - (1 - u) ** 2))
+        elif taper > 0 and d_local > usable - taper:
+            u = (usable - d_local) / taper
+            w = half_width_m * math.sqrt(max(0.0, 1 - (1 - u) ** 2))
+        else:
+            w = half_width_m
+        nx, ny = -ty, tx
+        left.append((x + nx * w, y + ny * w))
+        right.append((x - nx * w, y - ny * w))
+
+    ring = left + right[::-1]
+    out = []
+    for x, y in ring:
+        out.append([lat0 + y / _METERS_PER_DEG_LAT,
+                    lon0 + x / (_METERS_PER_DEG_LAT * cos_lat)])
+    out.append(out[0])
+    return out
+
+
+def _route_coverage(coords: list[list[float]], route: list[list[float]],
+                    cos_lat: float, max_dist_m: float = 60.0) -> float:
+    """Fraction of polygon vertices within ``max_dist_m`` of the route polyline."""
+    if not coords or len(route) < 2:
+        return 0.0
+
+    def to_m(p):
+        return ((p[1] - route[0][1]) * cos_lat * _METERS_PER_DEG_LAT,
+                (p[0] - route[0][0]) * _METERS_PER_DEG_LAT)
+
+    segs = [(to_m(a), to_m(b)) for a, b in zip(route, route[1:])]
+
+    def dist_to_route(pt):
+        best = math.inf
+        px, py = pt
+        for (ax, ay), (bx, by) in segs:
+            vx, vy = bx - ax, by - ay
+            L2 = vx * vx + vy * vy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((px - ax) * vx + (py - ay) * vy) / L2))
+            best = min(best, math.hypot(px - (ax + vx * t), py - (ay + vy * t)))
+        return best
+
+    near = sum(1 for c in coords if dist_to_route(to_m(c)) <= max_dist_m)
+    return near / len(coords)
+
+
+def synthesize_missing_features(hole: dict) -> dict:
+    """Return a copy of ``hole`` with a fairway (and rough) corridor added when
+    OpenStreetMap has none for it.
+
+    Many courses are only partially mapped: tees, greens and bunkers exist
+    but no fairway polygon, which renders as a few specks. The corridor
+    follows ``route_coords`` so doglegs are preserved, and is sized by par.
+    """
+    route = hole.get("route_coords") or hole.get("routeCoords") or []
+    if len(route) < 2:
+        return hole
+    features = list(hole.get("features") or [])
+    mid_lat = sum(p[0] for p in route) / len(route)
+    cos_lat = math.cos(mid_lat * math.pi / 180) or 1e-6
+
+    # A fairway only counts if it actually sits on this hole's route. A
+    # driving range or a neighbouring polygon that got associated by
+    # proximity would otherwise block the corridor and draw as a blob.
+    real_fairways = [f for f in features
+                     if f.get("category") == "fairway"
+                     and len(f.get("coords") or []) >= 2
+                     and _route_coverage(f["coords"], route, cos_lat) >= 0.5]
+    if real_fairways:
+        return hole
+    features = [f for f in features if f.get("category") != "fairway"]
+    cats = {f.get("category") for f in features}
+
+    par = hole.get("par") or 4
+
+    if par <= 3:
+        half_w, start_m, end_m = 12.0, 16.0, 12.0
+    elif par == 4:
+        half_w, start_m, end_m = 28.0, 40.0, 12.0
+    else:
+        half_w, start_m, end_m = 30.0, 45.0, 12.0
+
+    hole_id = hole.get("ref", "x")
+    fairway = _offset_polyline(route, half_w, cos_lat, start_m, end_m, taper_m=35.0)
+    if not fairway:
+        return hole
+
+    synthetic = []
+    if "rough" not in cats:
+        rough = _offset_polyline(route, half_w + (9.0 if par <= 3 else 14.0), cos_lat,
+                                 max(0.0, start_m - 30.0), max(0.0, end_m - 16.0),
+                                 taper_m=30.0)
+        if rough:
+            synthetic.append({
+                "id": f"synthetic-rough-{hole_id}", "category": "rough",
+                "ref": None, "par": None, "name": None, "coords": rough,
+                "synthetic": True,
+            })
+    synthetic.append({
+        "id": f"synthetic-fairway-{hole_id}", "category": "fairway",
+        "ref": None, "par": None, "name": None, "coords": fairway,
+        "synthetic": True,
+    })
+
+    # Draw synthetic ground first so mapped tees/greens/bunkers sit on top.
+    new_hole = dict(hole)
+    new_hole["features"] = synthetic + features
+    return new_hole
 
 
 def _find_pass_split(hole_layouts: list[dict]) -> int:
@@ -489,6 +678,44 @@ def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float,
     return result
 
 
+def _simulate_featured(hole_layouts: list[dict], gap_fraction: float,
+                       x_min: float = 0.06, x_max: float = 0.94) -> list[dict]:
+    """Place a few featured holes so each one sweeps most of the width.
+
+    Direction alternates every hole (a true zigzag). Each hole's horizontal
+    run is 65-100% of the available width, scaled by its relative length,
+    and always starts at the edge so the holes read as big diagonal bands.
+    """
+    n = len(hole_layouts)
+    span = x_max - x_min
+    max_len = max(h["length_fraction"] for h in hole_layouts) or 1.0
+    avg_length = sum(h["length_fraction"] for h in hole_layouts) / n
+    gap = avg_length * gap_fraction
+
+    cur_y = 0.0
+    direction = 1
+    result = []
+    for i, h in enumerate(hole_layouts):
+        dx = span * (0.55 + 0.45 * h["length_fraction"] / max_len)
+        dy = dx * math.tan(h["angle_rad"])
+        start_x = x_min if direction > 0 else x_max
+        end_x = start_x + direction * dx
+        result.append({
+            **h,
+            "start_x": start_x,
+            "start_y": cur_y,
+            "end_x": end_x,
+            "end_y": cur_y + dy,
+            "direction": direction,
+            "raw_length": math.hypot(dx, dy),
+        })
+        cur_y += dy
+        if i < n - 1:
+            cur_y += gap
+        direction *= -1
+    return result
+
+
 def _rescale_to_fill(holes, draw_left, draw_top, draw_width, draw_height):
     """Rescale all positioned holes so their visible content fills the draw area."""
     content_min_y = math.inf
@@ -569,11 +796,10 @@ def _enforce_green_tee_gap(holes, min_gap: float = 2):
                         c[1] += shift
 
 
-def _fix_overlaps(holes):
+def _fix_overlaps(holes, min_gap: float = 5):
     """Shift subsequent holes down to eliminate vertical overlap."""
     if len(holes) < 2:
         return
-    min_gap = 5
 
     for i in range(1, len(holes)):
         prev = holes[i - 1]
@@ -601,7 +827,7 @@ def _fix_overlaps(holes):
                         c[1] += overlap
 
 
-def _pack_holes(holes):
+def _pack_holes(holes, target_gap: float = 5):
     """Pack holes tight by removing excess vertical gaps.
 
     Uses end_y as a floor for prev_bottom so that a hole with no green
@@ -611,7 +837,6 @@ def _pack_holes(holes):
     """
     if len(holes) < 2:
         return
-    target_gap = 5
 
     for i in range(1, len(holes)):
         prev = holes[i - 1]
@@ -718,7 +943,10 @@ def _transform_hole_features(hole, start_x, start_y, end_x, end_y, max_width):
 
     for lat, lon in route:
         dx = (lon - geo_tee[1]) * cos_lat
-        dy = lat - geo_tee[0]
+        # Same y convention as the feature loop above (canvas y grows south).
+        # With the sign flipped, a diagonal route looked far off-axis and the
+        # width clamp shrank every feature on the hole.
+        dy = -(lat - geo_tee[0])
         perp = -dx * math.sin(geo_angle) + dy * math.cos(geo_angle)
         if perp < min_perp:
             min_perp = perp

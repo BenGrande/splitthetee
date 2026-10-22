@@ -90,6 +90,9 @@ export const useDesignerStore = defineStore('designer', () => {
   const scorecardUrl = ref<string | null>(null)
   const glassSetId = ref<string | null>(null)
   const recipientName = ref('')
+  // Hole refs to feature (empty = every hole). When set, only these holes are
+  // sent to the renderer and the backend uses the big "featured" layout.
+  const featuredHoles = ref<number[]>([])
 
   const svgContent = ref('')
   const loading = ref(false)
@@ -210,7 +213,35 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
     statusMessage.value = 'Print test page opened — 1:1 scale, landscape'
   }
 
+  function toggleFeaturedHole(ref: number) {
+    const set = new Set(featuredHoles.value)
+    if (set.has(ref)) set.delete(ref)
+    else set.add(ref)
+    featuredHoles.value = [...set].sort((a, b) => a - b)
+  }
+
+  function clearFeaturedHoles() {
+    featuredHoles.value = []
+  }
+
+  /** Holes to render: the featured subset when one is chosen, else all. */
+  function selectHoles(courseData: any): any[] {
+    const all: any[] = courseData?.holes || []
+    if (!featuredHoles.value.length) return all
+    const wanted = new Set(featuredHoles.value)
+    const picked = all.filter(h => wanted.has(Number(h.ref)))
+    return picked.length ? picked : all
+  }
+
   function computeHoleRange(holes: any[]): string {
+    if (featuredHoles.value.length) {
+      const totalHoles = holes.length
+      const perGlass = Math.ceil(totalHoles / glassCount.value)
+      const start = currentGlass.value * perGlass
+      const slice = holes.slice(start, Math.min(start + perGlass, totalHoles))
+      if (!slice.length) return ''
+      return `Holes ${slice.map(h => h.ref).join(' · ')}`
+    }
     const totalHoles = holes.length
     const perGlass = Math.ceil(totalHoles / glassCount.value)
     const start = currentGlass.value * perGlass
@@ -227,7 +258,8 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
     statusMessage.value = 'Rendering...'
     if (courseData.courseName) courseName.value = courseData.courseName
 
-    const holeRange = computeHoleRange(courseData.holes)
+    const holes = selectHoles(courseData)
+    const holeRange = computeHoleRange(holes)
 
     try {
       // Pass lat/lng from courseData.center as fallback
@@ -240,7 +272,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          holes: courseData.holes,
+          holes,
           course_name: courseData.courseName || '',
           hole_range: holeRange,
           options: opts,
@@ -395,7 +427,9 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
       cricut_shape: cricutShape.value,
       canvas_width: canvasWidth,
       canvas_height: canvasHeight,
-      layout: twoColumnLayout.value ? 'two_column' : 'single',
+      layout: featuredHoles.value.length ? 'single' : (twoColumnLayout.value ? 'two_column' : 'single'),
+      featured_layout: featuredHoles.value.length > 0,
+      featured_holes: featuredHoles.value,
       course_name_banner: courseNameBanner.value,
     }
   }
@@ -405,14 +439,15 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
     cricutLoading.value = true
     statusMessage.value = 'Generating Cricut layers...'
 
-    const holeRange = computeHoleRange(courseData.holes)
+    const holes = selectHoles(courseData)
+    const holeRange = computeHoleRange(holes)
 
     try {
       const res = await fetch('/api/v1/render/cricut', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          holes: courseData.holes,
+          holes,
           course_name: courseData.courseName || '',
           hole_range: holeRange,
           options: buildRenderOptions(true),
@@ -587,6 +622,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
       showText: showText.value,
       perHoleColors: perHoleColors.value,
       logoDataUrl: logoDataUrl.value,
+      featuredHoles: [...featuredHoles.value],
     }
 
     try {
@@ -658,6 +694,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
     if (s.logoDataUrl !== undefined) logoDataUrl.value = s.logoDataUrl
     if (s.twoColumnLayout !== undefined) twoColumnLayout.value = s.twoColumnLayout
     if (s.courseNameBanner !== undefined) courseNameBanner.value = s.courseNameBanner
+    if (Array.isArray(s.featuredHoles)) featuredHoles.value = s.featuredHoles.map(Number)
   }
 
   return {
@@ -681,6 +718,10 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
     scorecardUrl,
     glassSetId,
     recipientName,
+    featuredHoles,
+    toggleFeaturedHole,
+    clearFeaturedHoles,
+    selectHoles,
     courseName,
     svgContent,
     loading,

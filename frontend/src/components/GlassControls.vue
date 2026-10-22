@@ -1,7 +1,15 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useDesignerStore, FONT_OPTIONS } from '../stores/designer'
+import { useCourseStore } from '../stores/course'
 
 const store = useDesignerStore()
+const courseStore = useCourseStore()
+
+const courseHoles = computed<{ ref: number; par: number | null }[]>(() =>
+  (courseStore.courseData?.holes || []).map((h: any) => ({ ref: Number(h.ref), par: h.par ?? null }))
+)
+const featuredSet = computed(() => new Set(store.featuredHoles))
 
 const glassCountOptions = [1, 2, 3, 6]
 const previewModes = [
@@ -56,8 +64,36 @@ function clearLogo() {
         </button>
       </div>
 
+      <div v-if="courseHoles.length" class="mt-3">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-xs text-gray-400">Featured holes</label>
+          <button
+            v-if="store.featuredHoles.length"
+            @click="store.clearFeaturedHoles()"
+            class="text-[10px] text-gray-500 hover:text-gray-300"
+          >All holes</button>
+        </div>
+        <div class="grid grid-cols-6 gap-1">
+          <button
+            v-for="h in courseHoles"
+            :key="h.ref"
+            @click="store.toggleFeaturedHole(h.ref)"
+            :title="h.par ? `Hole ${h.ref} · Par ${h.par}` : `Hole ${h.ref}`"
+            class="px-0 py-1 text-[11px] leading-none rounded border transition-colors"
+            :class="featuredSet.has(h.ref)
+              ? 'bg-emerald-800 border-emerald-500 text-emerald-100'
+              : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'"
+          >{{ h.ref }}</button>
+        </div>
+        <p class="text-[10px] text-gray-600 mt-1">
+          {{ store.featuredHoles.length
+            ? `${store.featuredHoles.length} picked — drawn large, best on 1 glass`
+            : 'Pick 3–6 holes to feature them large on one glass' }}
+        </p>
+      </div>
+
       <label class="flex items-center gap-2 text-xs text-gray-400 mt-2 cursor-pointer">
-        <input type="checkbox" v-model="store.twoColumnLayout" class="accent-emerald-500 w-3.5 h-3.5" />
+        <input type="checkbox" v-model="store.twoColumnLayout" class="accent-emerald-500 w-3.5 h-3.5" :disabled="store.featuredHoles.length > 0" />
         Two-column layout
       </label>
 
