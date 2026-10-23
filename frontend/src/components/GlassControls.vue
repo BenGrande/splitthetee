@@ -87,13 +87,13 @@ function clearLogo() {
         </div>
         <p class="text-[10px] text-gray-600 mt-1">
           {{ store.featuredHoles.length
-            ? `${store.featuredHoles.length} picked — drawn large, best on 1 glass`
+            ? `${store.featuredHoles.length} picked — drawn large; two-column stacks them in balanced columns`
             : 'Pick 3–6 holes to feature them large on one glass' }}
         </p>
       </div>
 
       <label class="flex items-center gap-2 text-xs text-gray-400 mt-2 cursor-pointer">
-        <input type="checkbox" v-model="store.twoColumnLayout" class="accent-emerald-500 w-3.5 h-3.5" :disabled="store.featuredHoles.length > 0" />
+        <input type="checkbox" v-model="store.twoColumnLayout" class="accent-emerald-500 w-3.5 h-3.5" />
         Two-column layout
       </label>
 

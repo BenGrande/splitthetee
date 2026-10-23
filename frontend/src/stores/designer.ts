@@ -427,7 +427,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #fff; 
       cricut_shape: cricutShape.value,
       canvas_width: canvasWidth,
       canvas_height: canvasHeight,
-      layout: featuredHoles.value.length ? 'single' : (twoColumnLayout.value ? 'two_column' : 'single'),
+      layout: twoColumnLayout.value ? 'two_column' : 'single',
       featured_layout: featuredHoles.value.length > 0,
       featured_holes: featuredHoles.value,
       course_name_banner: courseNameBanner.value,

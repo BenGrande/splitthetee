@@ -619,13 +619,20 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str,
     # box_factor folds in the extra zoom only when the canvas is large
     # enough that the on-screen 900x700 preview is unaffected (s == 1.0).
     box_factor = 1.0 if s <= 1.0 else 1.8
-    cr = 2.5 if is_warped else 3.5 * s * box_factor
-    font_size = 1.8 if is_warped else 2.8 * s * box_factor
-    num_font = 2.5 if is_warped else 3.5 * s * box_factor
-    line_height = font_size + (0.8 if is_warped else 0.8 * s * box_factor)
-    padding_x = 1.2 if is_warped else 1.2 * s * box_factor
-    padding_y = 1.0 if is_warped else 1.0 * s * box_factor
-    box_w = 13 if is_warped else 17 * s * box_factor
+    # Featured holes are few and big, so their card is a title block:
+    # larger badge and type, no outline box.
+    featured = bool(hole.get("_featured_label"))
+    wf = 1.0  # warped-size multiplier
+    if featured:
+        box_factor *= 2.0
+        wf = 1.45
+    cr = 2.5 * wf if is_warped else 3.5 * s * box_factor
+    font_size = 1.8 * wf if is_warped else 2.8 * s * box_factor
+    num_font = 2.5 * wf if is_warped else 3.5 * s * box_factor
+    line_height = font_size + (0.8 * wf if is_warped else 0.8 * s * box_factor)
+    padding_x = 1.2 * wf if is_warped else 1.2 * s * box_factor
+    padding_y = 1.0 * wf if is_warped else 1.0 * s * box_factor
+    box_w = 13 * wf if is_warped else 17 * s * box_factor
 
     # Box height: circle area + gap + text lines
     circle_area = cr * 2 + (1.5 if is_warped else 1.5 * s * box_factor)  # diameter + small gap below circle
@@ -680,12 +687,13 @@ def _render_hole_stats(hole: dict, opts: dict, font_family: str,
 
     svg = ""
 
-    # Box outline
-    svg += (
-        f'<rect x="{_ff(box_x)}" y="{_ff(box_y)}" '
-        f'width="{_ff(box_w)}" height="{_ff(box_h)}" rx="1" '
-        f'fill="none" stroke="#ffffff" stroke-width="0.2" opacity="1"/>'
-    )
+    # Box outline (featured cards are open, no frame)
+    if not featured:
+        svg += (
+            f'<rect x="{_ff(box_x)}" y="{_ff(box_y)}" '
+            f'width="{_ff(box_w)}" height="{_ff(box_h)}" rx="1" '
+            f'fill="none" stroke="#ffffff" stroke-width="0.2" opacity="1"/>'
+        )
 
     # Hole number circle at top of box — alternating style matching ruler
     circle_cy = box_y + padding_y + cr
@@ -1801,8 +1809,8 @@ def render_svg(layout: dict, opts: dict | None = None) -> str:
 
     # Scoring arcs removed — will be replaced by terrain-following zones
 
-    # Hole numbers
-    if "hole_number" not in hidden:
+    # Hole numbers (featured layouts carry the number in the hole card)
+    if "hole_number" not in hidden and not layout.get("featured"):
         s = styles["hole_number"]
         sz = 5 if is_warped else 6
         cr = 5 if is_warped else 6

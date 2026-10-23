@@ -70,13 +70,14 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
             "yardage": yardage,
         })
 
-    if opts.get("layout") == "two_column" and len(hole_layouts) >= 6:
+    if opts.get("layout") == "two_column" and (len(hole_layouts) >= 6 or (featured and len(hole_layouts) >= 2)):
         return _compute_two_pass_layout(
             holes, hole_layouts, opts,
             draw_left, draw_right, draw_top, draw_bottom,
             draw_width, draw_height,
             canvas_width, canvas_height,
             max_hole_width, hole_padding,
+            featured=featured,
         )
 
     # Simulate zigzag (featured: reverse direction on every hole so each
@@ -145,10 +146,15 @@ def compute_layout(holes: list[dict], opts: dict | None = None) -> dict:
     _enforce_green_tee_gap(positioned, min_gap=gap if featured else 2)
     _rescale_to_fill(positioned, draw_left, draw_top, draw_width, draw_height)
 
+    if featured:
+        for h in positioned:
+            h["_featured_label"] = True
+
     return {
         "holes": positioned,
         "canvas_width": canvas_width,
         "canvas_height": canvas_height,
+        "featured": featured,
         "draw_area": {
             "left": draw_left,
             "right": draw_right,
@@ -335,8 +341,13 @@ def _find_pass_split(hole_layouts: list[dict]) -> int:
 
 
 def _position_raw(raw_positions, hole_layouts_subset, draw_left, draw_top,
-                  draw_width, draw_height, max_hole_width):
-    """Scale raw zigzag positions to canvas coordinates and transform features."""
+                  draw_width, draw_height, max_hole_width, true_length: bool = False):
+    """Scale raw zigzag positions to canvas coordinates and transform features.
+
+    ``true_length`` measures each hole's length from its canvas spine (x and
+    y are scaled independently here) so the feature width clamp never
+    shrinks a hole that sweeps a wide column.
+    """
     if not raw_positions:
         return []
 
@@ -357,6 +368,8 @@ def _position_raw(raw_positions, hole_layouts_subset, draw_left, draw_top,
         end_x = map_x(rp["end_x"])
         end_y = draw_top + rp["end_y"] * scale_factor
         length = rp["raw_length"] * scale_factor
+        if true_length:
+            length = math.hypot(end_x - start_x, end_y - start_y)
         mw = length * max_hole_width
 
         features = _transform_hole_features(
@@ -386,14 +399,17 @@ def _compute_two_pass_layout(holes, hole_layouts, opts,
                              draw_left, draw_right, draw_top, draw_bottom,
                              draw_width, draw_height,
                              canvas_width, canvas_height,
-                             max_hole_width, hole_padding):
+                             max_hole_width, hole_padding,
+                             featured: bool = False):
     """Compute a side-by-side two-column layout — both columns span full height.
 
     Column 1 (first N holes): LEFT column, full canvas height.
     Column 2 (remaining holes): RIGHT column, full canvas height.
     Left ruler sits between the title and column 1; right ruler on the far right.
     """
-    split_idx = _find_pass_split(hole_layouts)
+    # Featured: balance the columns (3 | 2 for five holes) and keep the
+    # extra hole on the left so the eye reads top-left first.
+    split_idx = math.ceil(len(hole_layouts) / 2) if featured else _find_pass_split(hole_layouts)
     col1_layouts = hole_layouts[:split_idx]
     col2_layouts = hole_layouts[split_idx:]
 
@@ -434,34 +450,84 @@ def _compute_two_pass_layout(holes, hole_layouts, opts,
     # Slightly wider holes than default for two-column mode
     two_col_hole_width = max(max_hole_width, 0.5)
 
-    raw1 = _simulate_zigzag(col1_layouts, hole_padding,
-                            start_x=0.06, start_direction=1)
-    raw2 = _simulate_zigzag(col2_layouts, hole_padding,
-                            start_x=0.06, start_direction=1)
+    if featured:
+        # Every hole gets the same slot height in both columns; a column
+        # with fewer holes is centred vertically instead of stretched, so
+        # the two columns read as one balanced composition. Columns mirror
+        # each other (left column starts tee-left, right column tee-right).
+        slots = max(len(col1_layouts), len(col2_layouts))
+        slot_gap = draw_height * 0.05
+        slot_h = (draw_height - slot_gap * (slots - 1)) / slots
+        raw1 = _simulate_featured_column(col1_layouts, start_direction=1)
+        raw2 = _simulate_featured_column(col2_layouts, start_direction=-1)
+        col_tops = []
+        col_heights = []
+        for group in (col1_layouts, col2_layouts):
+            k = len(group)
+            h = slot_h * k + slot_gap * (k - 1)
+            col_heights.append(h)
+            col_tops.append(draw_top + (draw_height - h) / 2)
+        pos1 = _position_raw(raw1, col1_layouts, left_draw_left, col_tops[0],
+                             left_col_width, col_heights[0], two_col_hole_width,
+                             true_length=True)
+        pos2 = _position_raw(raw2, col2_layouts, right_col_left, col_tops[1],
+                             right_col_width, col_heights[1], two_col_hole_width,
+                             true_length=True)
+        for group, dl, dw, dt, dh in [(pos1, left_draw_left, left_col_width, col_tops[0], col_heights[0]),
+                                      (pos2, right_col_left, right_col_width, col_tops[1], col_heights[1])]:
+            _fix_overlaps(group, min_gap=slot_gap)
+            _enforce_green_tee_gap(group, min_gap=slot_gap)
+            _rescale_to_fill(group, dl, dt, dw, dh, uniform=True)
+            _pack_holes(group, target_gap=slot_gap)
+            _enforce_slope(group)
+            _enforce_green_tee_gap(group, min_gap=slot_gap)
+            _rescale_to_fill(group, dl, dt, dw, dh, uniform=True)
+    else:
+        raw1 = _simulate_zigzag(col1_layouts, hole_padding,
+                                start_x=0.06, start_direction=1)
+        raw2 = _simulate_zigzag(col2_layouts, hole_padding,
+                                start_x=0.06, start_direction=1)
 
-    pos1 = _position_raw(raw1, col1_layouts, left_draw_left, draw_top,
-                         left_col_width, draw_height, two_col_hole_width)
-    pos2 = _position_raw(raw2, col2_layouts, right_col_left, draw_top,
-                         right_col_width, draw_height, two_col_hole_width)
+        pos1 = _position_raw(raw1, col1_layouts, left_draw_left, draw_top,
+                             left_col_width, draw_height, two_col_hole_width)
+        pos2 = _position_raw(raw2, col2_layouts, right_col_left, draw_top,
+                             right_col_width, draw_height, two_col_hole_width)
 
-    # Post-process each column independently — both span full draw_height
-    for group, dl, dw in [(pos1, left_draw_left, left_col_width),
-                          (pos2, right_col_left, right_col_width)]:
-        _fix_overlaps(group)
-        _enforce_green_tee_gap(group)
-        _rescale_to_fill(group, dl, draw_top, dw, draw_height)
-        _pack_holes(group)
-        _enforce_slope(group)
-        _rescale_to_fill(group, dl, draw_top, dw, draw_height)
+        # Post-process each column independently — both span full draw_height
+        for group, dl, dw in [(pos1, left_draw_left, left_col_width),
+                              (pos2, right_col_left, right_col_width)]:
+            _fix_overlaps(group)
+            _enforce_green_tee_gap(group)
+            _rescale_to_fill(group, dl, draw_top, dw, draw_height)
+            _pack_holes(group)
+            _enforce_slope(group)
+            _rescale_to_fill(group, dl, draw_top, dw, draw_height)
 
     # Stagger info-box positions alongside each hole. The box sits at the
     # GREEN's X position but at the TEE's Y level — so it's vertically above
     # the green and horizontally offset from the tee. The dotted connector
     # runs horizontally from the tee across to the box at the same Y.
-    for group in (pos1, pos2):
-        for hole in group:
-            hole["_info_box_cx"] = hole["end_x"]    # same X as green
-            hole["_info_box_cy"] = hole["start_y"]  # same Y as tee
+    middle_gap_left_edge = left_draw_left + left_col_width
+    middle_gap_right_edge = right_col_left
+    if featured:
+        # Featured: the hole card sits in the channel on the TEE's side, a
+        # little below the tee, so the connector is short and the card reads
+        # as the hole's title block. Outer channels for outer tees, the two
+        # halves of the middle gap for inner tees.
+        # The card sits in the empty upper corner of the slot: level with
+        # the tee, halfway along the hole's run, so it is clear of the
+        # rulers and the glass-edge reserves whichever way the glass warps.
+        label_drop = 16 * chrome_scale
+        for hole in pos1 + pos2:
+            hole["_featured_label"] = True
+            run = abs(hole["end_x"] - hole["start_x"])
+            hole["_info_box_cx"] = hole["start_x"] + hole["direction"] * run * 0.5
+            hole["_info_box_cy"] = hole["start_y"] + label_drop
+    else:
+        for group in (pos1, pos2):
+            for hole in group:
+                hole["_info_box_cx"] = hole["end_x"]    # same X as green
+                hole["_info_box_cy"] = hole["start_y"]  # same Y as tee
 
     # If the default position (above the green) collides with any course
     # feature, shift the box horizontally until the overlap clears. Use the
@@ -473,8 +539,6 @@ def _compute_two_pass_layout(holes, hole_layouts, opts,
     rb_safety = 2 * chrome_scale
     rb_shift = max(60, 0.4 * effective_width)
     rb_step = 3 * chrome_scale
-    middle_gap_left_edge = left_draw_left + left_col_width
-    middle_gap_right_edge = right_col_left
     _resolve_info_box_overlaps(
         pos1,
         box_w=rb_w, box_h=rb_h,
@@ -497,6 +561,7 @@ def _compute_two_pass_layout(holes, hole_layouts, opts,
         "canvas_width": canvas_width,
         "canvas_height": canvas_height,
         "layout_mode": "two_column",
+        "featured": featured,
         "column_split": split_idx,
         "draw_area": {
             "left": left_draw_left,
@@ -678,6 +743,51 @@ def _simulate_zigzag(hole_layouts: list[dict], gap_fraction: float,
     return result
 
 
+def _simulate_featured_column(hole_layouts: list[dict], start_direction: int = 1,
+                              x_min: float = 0.06, x_max: float = 0.94,
+                              angle_deg: float = 48.0) -> list[dict]:
+    """Stack featured holes in one column as equal-height diagonal slots.
+
+    Each hole sweeps 70-100% of the column width (longer holes sweep more),
+    zigzagging so consecutive tees and greens stay close. The slot height is
+    the same for every hole; _position_raw scales the column to its box.
+    """
+    n = len(hole_layouts)
+    if n == 0:
+        return []
+    span = x_max - x_min
+    max_len = max(h["length_fraction"] for h in hole_layouts) or 1.0
+    full_dx = span
+    full_dy = full_dx * math.tan(math.radians(angle_deg))
+    gap = full_dy * 0.12
+
+    cur_y = 0.0
+    direction = start_direction
+    result = []
+    for i, h in enumerate(hole_layouts):
+        frac = 0.7 + 0.3 * h["length_fraction"] / max_len
+        dx = full_dx * frac
+        dy = full_dy  # same slot height for every hole
+        # Centre shorter holes in the column so the column edges stay even.
+        inset = (span - dx) / 2
+        start_x = (x_min + inset) if direction > 0 else (x_max - inset)
+        end_x = start_x + direction * dx
+        result.append({
+            **h,
+            "start_x": start_x,
+            "start_y": cur_y,
+            "end_x": end_x,
+            "end_y": cur_y + dy,
+            "direction": direction,
+            "raw_length": math.hypot(dx, dy),
+        })
+        cur_y += dy
+        if i < n - 1:
+            cur_y += gap
+        direction *= -1
+    return result
+
+
 def _simulate_featured(hole_layouts: list[dict], gap_fraction: float,
                        x_min: float = 0.06, x_max: float = 0.94) -> list[dict]:
     """Place a few featured holes so each one sweeps most of the width.
@@ -716,8 +826,14 @@ def _simulate_featured(hole_layouts: list[dict], gap_fraction: float,
     return result
 
 
-def _rescale_to_fill(holes, draw_left, draw_top, draw_width, draw_height):
-    """Rescale all positioned holes so their visible content fills the draw area."""
+def _rescale_to_fill(holes, draw_left, draw_top, draw_width, draw_height,
+                     uniform: bool = False):
+    """Rescale all positioned holes so their visible content fills the draw area.
+
+    ``uniform`` keeps the aspect ratio (one scale for x and y, content
+    centred in the box) so designed hole angles survive; the default
+    stretches x and y independently to fill the box exactly.
+    """
     content_min_y = math.inf
     content_max_y = -math.inf
     content_min_x = math.inf
@@ -745,6 +861,11 @@ def _rescale_to_fill(holes, draw_left, draw_top, draw_width, draw_height):
 
     y_rescale = draw_height / content_height
     x_rescale = draw_width / content_width
+    if uniform:
+        x_rescale = y_rescale = min(x_rescale, y_rescale)
+        # Centre the content inside the box.
+        draw_left = draw_left + (draw_width - content_width * x_rescale) / 2
+        draw_top = draw_top + (draw_height - content_height * y_rescale) / 2
 
     for h in holes:
         h["start_x"] = draw_left + (h["start_x"] - content_min_x) * x_rescale

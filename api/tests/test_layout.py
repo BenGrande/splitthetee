@@ -296,3 +296,38 @@ class TestFeaturedLayout:
         lay = compute_layout([_sparse_hole(1)], {"synthesize_fairways": False})
         cats = {f["category"] for f in lay["holes"][0]["features"]}
         assert "fairway" not in cats
+
+
+class TestFeaturedTwoColumn:
+    def _holes(self):
+        return [_sparse_hole(i, par=p, yardage=y)
+                for i, (p, y) in enumerate([(4, 426), (3, 202), (4, 483), (3, 198), (5, 514)], 1)]
+
+    def test_balanced_split_and_centered_short_column(self):
+        lay = compute_layout(self._holes(), {"featured_layout": True, "layout": "two_column"})
+        assert lay["layout_mode"] == "two_column" and lay["featured"] is True
+        assert lay["column_split"] == 3
+        col1, col2 = lay["holes"][:3], lay["holes"][3:]
+        gap = lay["draw_area"]["middle_gap_right"] - lay["draw_area"]["middle_gap_left"]
+        assert all(h["start_x"] < lay["draw_area"]["middle_gap_left"] + gap for h in col1)
+        assert all(h["end_x"] > lay["draw_area"]["middle_gap_left"] for h in col2)
+        # Two-hole column is vertically centred inside the three-hole column's span.
+        top1 = min(h["start_y"] for h in col1); bot1 = max(h["end_y"] for h in col1)
+        top2 = min(h["start_y"] for h in col2); bot2 = max(h["end_y"] for h in col2)
+        assert top2 > top1 + 20 and bot2 < bot1 - 20
+
+    def test_columns_mirror_and_zigzag(self):
+        lay = compute_layout(self._holes(), {"featured_layout": True, "layout": "two_column"})
+        assert [h["direction"] for h in lay["holes"]] == [1, -1, 1, -1, 1]
+
+    def test_cards_sit_in_the_slot_corner(self):
+        lay = compute_layout(self._holes(), {"featured_layout": True, "layout": "two_column"})
+        for h in lay["holes"]:
+            assert h["_featured_label"] is True
+            lo, hi = sorted([h["start_x"], h["end_x"]])
+            assert lo < h["_info_box_cx"] < hi
+            assert h["_info_box_cy"] > h["start_y"]
+
+    def test_small_courses_still_use_single_column_without_featured(self):
+        lay = compute_layout(self._holes(), {"layout": "two_column"})
+        assert lay.get("layout_mode") != "two_column"
